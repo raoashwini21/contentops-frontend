@@ -335,10 +335,10 @@ export default function ContentOps() {
                 </span>
               </h1>
               <p className="text-xl text-purple-200 mb-3">
-                AI-powered research • Grammar fixes • Feature updates
+                Pure Brave research • AI-powered rewrites • Visual highlights
               </p>
               <p className="text-sm text-purple-300">
-                15-20 second checks • 2-stage AI pipeline (Research → Write)
+                15-20 second checks • 50% cheaper (Brave only for research)
               </p>
             </div>
 
@@ -352,9 +352,9 @@ export default function ContentOps() {
             {/* Features */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
               {[
-                { icon: <Search className="w-8 h-8" />, title: 'Brave Research', desc: 'Verifies pricing, features, stats with real-time search' },
-                { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Claude fixes grammar, adds missing features, updates facts' },
-                { icon: <TrendingUp className="w-8 h-8" />, title: 'Highlight Changes', desc: 'See exactly what was updated with visual highlights' }
+                { icon: <Search className="w-8 h-8" />, title: 'Pure Brave Research', desc: 'Stage 1: Direct Brave API searches (no Claude costs)' },
+                { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Stage 2: Claude fixes errors, adds features, improves grammar' },
+                { icon: <TrendingUp className="w-8 h-8" />, title: 'Visual Highlights', desc: 'See exactly what changed with yellow highlights' }
               ].map((f, i) => (
                 <div key={i} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 mx-auto text-white shadow-lg shadow-pink-500/30">
@@ -384,7 +384,7 @@ export default function ContentOps() {
                     placeholder="sk-ant-..."
                     className="w-full bg-white bg-opacity-10 border border-white border-opacity-20 rounded-lg px-4 py-3 text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
-                  <p className="text-xs text-purple-300 mt-1">Used for both research analysis & content rewriting</p>
+                  <p className="text-xs text-purple-300 mt-1">Used for Stage 2: Content rewriting only</p>
                 </div>
 
                 <div>
@@ -396,7 +396,7 @@ export default function ContentOps() {
                     placeholder="BSA..."
                     className="w-full bg-white bg-opacity-10 border border-white border-opacity-20 rounded-lg px-4 py-3 text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
-                  <p className="text-xs text-purple-300 mt-1">From brave.com/search/api (2000 free searches/month)</p>
+                  <p className="text-xs text-purple-300 mt-1">Used for Stage 1: Pure research (2000 free/month)</p>
                 </div>
 
                 <div>
@@ -448,7 +448,7 @@ export default function ContentOps() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-white">Your Blog Posts</h2>
-                <p className="text-purple-300 text-sm mt-1">Click to analyze with 2-stage AI pipeline (Research → Write)</p>
+                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite</p>
               </div>
               <button 
                 onClick={fetchBlogs} 
@@ -507,7 +507,7 @@ export default function ContentOps() {
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-8 text-white">
               <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
               <p className="text-green-100">
-                {result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrites • {result.sectionsUpdated} sections updated
+                {result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {result.sectionsUpdated} updates
               </p>
             </div>
 
@@ -650,7 +650,7 @@ export default function ContentOps() {
       <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
           <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-purple-300">ContentOps • 2-Stage AI Pipeline: Brave Research → Claude Writing</p>
+          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing</p>
         </div>
       </footer>
     </div>
