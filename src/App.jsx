@@ -18,6 +18,7 @@ export default function ContentOps() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
+  const [showBefore, setShowBefore] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -97,6 +98,7 @@ export default function ContentOps() {
         claudeCalls: data.claudeCalls || 0,
         sectionsUpdated: data.sectionsUpdated || 0,
         content: data.content || blog.fieldData['post-body'],
+        originalContent: blog.fieldData['post-body'] || '',
         duration: data.duration || 0
       });
 
@@ -404,10 +406,39 @@ export default function ContentOps() {
             </div>
 
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
-              <h3 className="text-2xl font-bold text-white mb-4">📄 Updated Content:</h3>
-              <div className="bg-black bg-opacity-30 p-6 rounded-lg max-h-96 overflow-y-auto">
-                <div className="prose prose-invert prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: result.content }} />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-white">📄 Content Preview:</h3>
+                <button
+                  onClick={() => setShowBefore(!showBefore)}
+                  className="bg-white bg-opacity-10 hover:bg-opacity-20 text-purple-300 px-4 py-2 rounded-lg text-sm font-semibold border border-white border-opacity-20 transition-all"
+                >
+                  {showBefore ? '✨ Show After' : '⏮️ Show Before'}
+                </button>
               </div>
+              
+              <div className="bg-white rounded-lg p-6 shadow-2xl max-h-96 overflow-y-auto">
+                <div 
+                  className="prose prose-sm max-w-none text-gray-800"
+                  style={{ 
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                    lineHeight: '1.6'
+                  }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: showBefore ? result.originalContent : result.content 
+                  }} 
+                />
+              </div>
+              
+              {showBefore && (
+                <div className="mt-3 px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                  <p className="text-yellow-200 text-sm">👆 This is the ORIGINAL content from Webflow</p>
+                </div>
+              )}
+              {!showBefore && (
+                <div className="mt-3 px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
+                  <p className="text-green-200 text-sm">✨ This is the UPDATED content after fact-checking</p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-4">
