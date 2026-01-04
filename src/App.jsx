@@ -4,6 +4,119 @@ import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp,
 // 🔧 UPDATE THIS WITH YOUR RAILWAY URL
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
+// System prompts for Claude
+const RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
+
+1. **Verify ALL claims** in the content:
+   - Pricing information (check official sources)
+   - Product features and capabilities
+   - Statistics, numbers, and data points
+   - Company information and comparisons
+   - Technical specifications and limits
+
+2. **Use Brave Search strategically**:
+   - Search official websites first (pricing pages, documentation)
+   - Use 2-3 targeted searches per topic
+   - Cross-reference multiple sources
+   - Prioritize recent information (2024-2025)
+
+3. **Focus on LinkedIn/SalesRobot specifics**:
+   - LinkedIn limits: 100 connection requests per WEEK (not day)
+   - LinkedIn messages: 50-100/day recommended
+   - SalesRobot pricing: Basic $59/mo, Advanced $79/mo, Pro $99/mo
+   - SalesRobot NEW/AI features (prioritize these):
+     * AI Voice Clone
+     * AI Inbox Manager  
+     * SalesGPT
+     * Smart Reply Detection
+     * AI Comment Automation
+     * AI Variables
+     * AI Message Scoring
+
+4. **Check for missing features**:
+   - Compare to competitor mentions
+   - Identify NEW features not mentioned
+   - Prioritize AI-powered capabilities
+
+5. **Return findings in this format**:
+{
+  "factChecks": [
+    {
+      "claim": "Brief claim statement",
+      "status": "outdated" | "incorrect" | "accurate",
+      "current": "What blog says",
+      "correct": "Verified correct info",
+      "source": "URL"
+    }
+  ],
+  "missingFeatures": [
+    {
+      "feature": "Feature name",
+      "priority": "high" | "medium" | "low",
+      "reason": "Why it matters",
+      "suggestion": "How to add it"
+    }
+  ]
+}
+
+Be thorough but concise. Focus on accuracy.`;
+
+const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
+
+**CRITICAL WRITING RULES:**
+
+🚫 **NEVER USE:**
+- Em-dashes (—)
+- Banned words: transform, delve, unleash, revolutionize, meticulous, navigating, realm, bespoke, tailored, autopilot, magic
+- Banned phrases: "the best part?", "the world of", "designed to enhance", "when it comes to"
+- Sentences over 30 words
+
+✅ **ALWAYS USE:**
+- Contractions (you'll, it's, don't)
+- Active voice
+- Short sentences (15-20 words average)
+- Direct address ("you")
+- Bold for key points
+- Natural, conversational tone
+
+**YOUR REWRITING PROCESS:**
+
+1. **Fix factual errors** found by research:
+   - Update pricing accurately
+   - Correct feature descriptions
+   - Fix statistics and data points
+   - Update company information
+
+2. **Add missing AI/NEW features** (HIGH PRIORITY):
+   - Integrate naturally into existing sections
+   - Explain benefits briefly (1-2 sentences)
+   - Maintain flow of article
+   - Add where most relevant
+
+3. **Fix grammar issues**:
+   - Remove em-dashes
+   - Eliminate banned words/phrases
+   - Shorten 30+ word sentences
+   - Add contractions
+   - Make active voice
+
+4. **Preserve structure**:
+   - Keep original HTML formatting
+   - Maintain headings and lists
+   - Keep images in place
+   - Preserve links
+
+5. **Add TL;DR if missing** (at the very start):
+   - 3-4 sentences
+   - Cover main points
+   - Include key features/benefits
+   - Make it scannable
+
+**Return format:**
+Only return the complete rewritten HTML content. No explanations, just the clean HTML.
+
+Make the blog more accurate, engaging, and complete while maintaining its original voice and structure.`;
+
 export default function ContentOps() {
   const [view, setView] = useState('home');
   const [config, setConfig] = useState({
@@ -19,6 +132,7 @@ export default function ContentOps() {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
   const [showBefore, setShowBefore] = useState(false);
+  const [showHighlights, setShowHighlights] = useState(true);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -68,6 +182,26 @@ export default function ContentOps() {
     }
   };
 
+  const highlightChanges = (originalHtml, updatedHtml) => {
+    if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
+    
+    // Simple sentence-based comparison
+    const originalSentences = originalHtml.split(/([.!?]\s+)/);
+    const updatedSentences = updatedHtml.split(/([.!?]\s+)/);
+    
+    let highlightedHtml = updatedHtml;
+    
+    // Find changed sentences and wrap them in highlight spans
+    updatedSentences.forEach((sentence, i) => {
+      if (sentence.trim() && originalSentences[i] !== sentence) {
+        const highlighted = `<span style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b;">${sentence}</span>`;
+        highlightedHtml = highlightedHtml.replace(sentence, highlighted);
+      }
+    });
+    
+    return highlightedHtml;
+  };
+
   const analyzeBlog = async (blog) => {
     setSelectedBlog(blog);
     setLoading(true);
@@ -81,7 +215,9 @@ export default function ContentOps() {
           blogContent: blog.fieldData['post-body'] || '',
           title: blog.fieldData.name,
           anthropicKey: config.anthropicKey,
-          braveKey: config.braveKey
+          braveKey: config.braveKey,
+          researchPrompt: RESEARCH_PROMPT,
+          writingPrompt: WRITING_PROMPT
         })
       });
 
@@ -189,7 +325,7 @@ export default function ContentOps() {
           <div className="text-center max-w-4xl mx-auto">
             <div className="mb-8">
               <div className="inline-block px-4 py-2 bg-pink-500 bg-opacity-20 rounded-full border border-pink-500 border-opacity-30 mb-6">
-                <span className="text-pink-300 text-sm font-semibold">Powered by Brave + Claude</span>
+                <span className="text-pink-300 text-sm font-semibold">Powered by Brave Search + Claude AI</span>
               </div>
               <h1 className="text-6xl font-bold text-white mb-4">
                 Smart Content
@@ -199,10 +335,10 @@ export default function ContentOps() {
                 </span>
               </h1>
               <p className="text-xl text-purple-200 mb-3">
-                Sectional analysis • Real-time search • Targeted rewrites
+                AI-powered research • Grammar fixes • Feature updates
               </p>
               <p className="text-sm text-purple-300">
-                15-20 second checks • 3x faster than traditional methods
+                15-20 second checks • 2-stage AI pipeline (Research → Write)
               </p>
             </div>
 
@@ -216,9 +352,9 @@ export default function ContentOps() {
             {/* Features */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
               {[
-                { icon: <Search className="w-8 h-8" />, title: 'Brave Search', desc: 'Real-time fact-checking with 2000 free searches/month' },
-                { icon: <Zap className="w-8 h-8" />, title: 'Sectional Analysis', desc: 'Only updates what needs fixing - faster & cheaper' },
-                { icon: <TrendingUp className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Claude rewrites only outdated sections' }
+                { icon: <Search className="w-8 h-8" />, title: 'Brave Research', desc: 'Verifies pricing, features, stats with real-time search' },
+                { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Claude fixes grammar, adds missing features, updates facts' },
+                { icon: <TrendingUp className="w-8 h-8" />, title: 'Highlight Changes', desc: 'See exactly what was updated with visual highlights' }
               ].map((f, i) => (
                 <div key={i} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 mx-auto text-white shadow-lg shadow-pink-500/30">
@@ -248,6 +384,7 @@ export default function ContentOps() {
                     placeholder="sk-ant-..."
                     className="w-full bg-white bg-opacity-10 border border-white border-opacity-20 rounded-lg px-4 py-3 text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
+                  <p className="text-xs text-purple-300 mt-1">Used for both research analysis & content rewriting</p>
                 </div>
 
                 <div>
@@ -311,7 +448,7 @@ export default function ContentOps() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-white">Your Blog Posts</h2>
-                <p className="text-purple-300 text-sm mt-1">Click to analyze with Brave + Claude (15-20s)</p>
+                <p className="text-purple-300 text-sm mt-1">Click to analyze with 2-stage AI pipeline (Research → Write)</p>
               </div>
               <button 
                 onClick={fetchBlogs} 
@@ -408,12 +545,26 @@ export default function ContentOps() {
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold text-white">📄 Content Preview:</h3>
-                <button
-                  onClick={() => setShowBefore(!showBefore)}
-                  className="bg-white bg-opacity-10 hover:bg-opacity-20 text-purple-300 px-4 py-2 rounded-lg text-sm font-semibold border border-white border-opacity-20 transition-all"
-                >
-                  {showBefore ? '✨ Show After' : '⏮️ Show Before'}
-                </button>
+                <div className="flex gap-2">
+                  {!showBefore && (
+                    <button
+                      onClick={() => setShowHighlights(!showHighlights)}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all ${
+                        showHighlights 
+                          ? 'bg-yellow-500 bg-opacity-20 border-yellow-500 border-opacity-30 text-yellow-200' 
+                          : 'bg-white bg-opacity-10 border-white border-opacity-20 text-purple-300 hover:bg-opacity-20'
+                      }`}
+                    >
+                      {showHighlights ? '✨ Highlights ON' : '⚪ Highlights OFF'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowBefore(!showBefore)}
+                    className="bg-white bg-opacity-10 hover:bg-opacity-20 text-purple-300 px-4 py-2 rounded-lg text-sm font-semibold border border-white border-opacity-20 transition-all"
+                  >
+                    {showBefore ? '✨ Show After' : '⏮️ Show Before'}
+                  </button>
+                </div>
               </div>
               
               <div className="bg-white rounded-lg p-6 shadow-2xl max-h-96 overflow-y-auto">
@@ -424,7 +575,7 @@ export default function ContentOps() {
                     lineHeight: '1.6'
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: showBefore ? result.originalContent : result.content 
+                    __html: highlightChanges(result.originalContent, result.content)
                   }} 
                 />
               </div>
@@ -434,9 +585,14 @@ export default function ContentOps() {
                   <p className="text-yellow-200 text-sm">👆 This is the ORIGINAL content from Webflow</p>
                 </div>
               )}
-              {!showBefore && (
+              {!showBefore && !showHighlights && (
                 <div className="mt-3 px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
                   <p className="text-green-200 text-sm">✨ This is the UPDATED content after fact-checking</p>
+                </div>
+              )}
+              {!showBefore && showHighlights && (
+                <div className="mt-3 px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                  <p className="text-yellow-200 text-sm">💡 Yellow highlights show AI-rewritten sections</p>
                 </div>
               )}
             </div>
@@ -494,7 +650,7 @@ export default function ContentOps() {
       <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
           <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-purple-300">ContentOps • Built with Brave Search + Claude AI</p>
+          <p className="mt-2 text-purple-300">ContentOps • 2-Stage AI Pipeline: Brave Research → Claude Writing</p>
         </div>
       </footer>
     </div>
