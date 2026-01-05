@@ -4,16 +4,41 @@ import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp,
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
 const RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
+
 1. Verify ALL claims in the content: pricing, features, stats, company info, technical specs
 2. Use Brave Search strategically: official websites first, 2-3 searches per topic, recent info (2024-2025)
-3. Focus on LinkedIn/SalesRobot: LinkedIn 100 requests/WEEK, SalesRobot pricing, AI features
-4. Check for missing features: AI Voice Clone, AI Inbox Manager, SalesGPT, Smart Reply Detection
-5. Return structured findings with factChecks and missingFeatures arrays`;
+3. Focus on LinkedIn/SalesRobot specifics:
+   - SalesRobot total users: 4200+
+   - LinkedIn daily limits: 75 connection requests per day (NOT 100/week)
+   - InMails: 40 per day to open profiles without credits
+   - SalesRobot pricing: Basic $59/mo, Advanced $79/mo, Pro $99/mo
+   - AI features: AI Voice Clone, AI Appointment Setter (NOT "AI Inbox Manager"), SalesGPT, Smart Reply Detection
+4. Check for missing AI/NEW features in competitor comparisons
+5. Return structured findings with factChecks and missingFeatures arrays
+
+Be thorough but concise. Focus on accuracy.`;
 
 const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
+
+**CRITICAL WRITING RULES:**
 NEVER USE: Em-dashes, banned words (transform, delve, unleash, revolutionize, meticulous, navigating, realm, bespoke, tailored, autopilot, magic), sentences over 30 words
 ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct address, bold for key points
-Fix factual errors, add missing AI features, fix grammar, preserve HTML structure, add TL;DR if missing
+
+**SALESROBOT SPECIFIC UPDATES - MUST APPLY:**
+1. User count: Always use "4200+" users (not 4000, 3000, etc.)
+2. LinkedIn limits: "75 connection requests per day" (not 100/week, not other numbers)
+3. InMail limits: "40 InMails per day to open profiles without credits"
+4. AI naming: Replace "AI Inbox Manager" with "AI Appointment Setter"
+5. Tagline: Use "Message 100s of people on LinkedIn and cold email. Every Week. Automatically." (not "send 200+ messages" or similar)
+6. Compliance: Always mention "SalesRobot fully complies with LinkedIn limits"
+
+**YOUR REWRITING PROCESS:**
+1. Fix factual errors found by research: Update pricing accurately, correct feature descriptions, fix stats
+2. Add missing AI features (HIGH PRIORITY): AI Voice Clone, AI Appointment Setter, SalesGPT, Smart Reply Detection, AI Comment Automation
+3. Fix grammar: Remove em-dashes, eliminate banned words, shorten 30+ word sentences, add contractions, use active voice
+4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links
+5. Add TL;DR if missing at the very start: 3-4 sentences covering main points
+
 Return only the complete rewritten HTML content.`;
 
 export default function ContentOps() {
