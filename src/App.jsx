@@ -185,19 +185,37 @@ export default function ContentOps() {
   const highlightChanges = (originalHtml, updatedHtml) => {
     if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
     
-    // Simple sentence-based comparison
-    const originalSentences = originalHtml.split(/([.!?]\s+)/);
-    const updatedSentences = updatedHtml.split(/([.!?]\s+)/);
+    // Strip HTML tags for comparison
+    const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const originalText = stripHtml(originalHtml);
+    const updatedText = stripHtml(updatedHtml);
     
+    // If texts are identical, no changes
+    if (originalText === updatedText) return updatedHtml;
+    
+    // Split into words for better comparison
+    const originalWords = originalText.split(' ');
+    const updatedWords = updatedText.split(' ');
+    
+    // Create a basic diff highlighting
     let highlightedHtml = updatedHtml;
     
-    // Find changed sentences and wrap them in highlight spans
-    updatedSentences.forEach((sentence, i) => {
-      if (sentence.trim() && originalSentences[i] !== sentence) {
-        const highlighted = `<span style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b;">${sentence}</span>`;
-        highlightedHtml = highlightedHtml.replace(sentence, highlighted);
+    // Find significant text chunks that changed (10+ words different)
+    const chunkSize = 10;
+    for (let i = 0; i < updatedWords.length - chunkSize; i++) {
+      const updatedChunk = updatedWords.slice(i, i + chunkSize).join(' ');
+      const originalChunk = originalWords.slice(i, i + chunkSize).join(' ');
+      
+      if (updatedChunk !== originalChunk && updatedChunk.length > 20) {
+        // Try to find this chunk in the HTML and highlight it
+        const escapedChunk = updatedChunk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedChunk})`, 'gi');
+        
+        highlightedHtml = highlightedHtml.replace(regex, (match) => {
+          return `<span style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b; display: inline-block;">${match}</span>`;
+        });
       }
-    });
+    }
     
     return highlightedHtml;
   };
@@ -567,7 +585,7 @@ export default function ContentOps() {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg p-6 shadow-2xl max-h-96 overflow-y-auto">
+              <div className="bg-white rounded-lg p-6 shadow-2xl max-h-[600px] overflow-y-auto">
                 <div 
                   className="prose prose-sm max-w-none text-gray-800"
                   style={{ 
@@ -580,79 +598,90 @@ export default function ContentOps() {
                 />
               </div>
               
-              {showBefore && (
-                <div className="mt-3 px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                  <p className="text-yellow-200 text-sm">👆 This is the ORIGINAL content from Webflow</p>
-                </div>
-              )}
-              {!showBefore && !showHighlights && (
-                <div className="mt-3 px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
-                  <p className="text-green-200 text-sm">✨ This is the UPDATED content after fact-checking</p>
-                </div>
-              )}
-              {!showBefore && showHighlights && (
-                <div className="mt-3 px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                  <p className="text-yellow-200 text-sm">💡 Yellow highlights show AI-rewritten sections</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                onClick={() => setView('dashboard')}
-                className="flex-1 bg-white bg-opacity-10 text-purple-300 py-4 rounded-xl font-semibold hover:bg-opacity-20 border border-white border-opacity-20"
-              >
-                ← Cancel
-              </button>
-              <button
-                onClick={publishToWebflow}
-                disabled={loading}
-                className="flex-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-2xl shadow-green-500/50"
-              >
-                {loading ? (
-                  <><Loader className="w-5 h-5 animate-spin" />Publishing...</>
-                ) : (
-                  <><CheckCircle className="w-5 h-5" />Publish to Webflow</>
+              <div className="mt-4 flex items-center justify-between">
+                {showBefore && (
+                  <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                    <p className="text-yellow-200 text-sm">👆 This is the ORIGINAL content from Webflow</p>
+                  </div>
                 )}
-              </button>
-            </div>
-
-            {status.message && (
-              <div className={`p-4 rounded-lg ${
-                status.type === 'error' ? 'bg-red-500 bg-opacity-20 border border-red-500 border-opacity-30' :
-                'bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30'
-              }`}>
-                <p className="text-white text-sm">{status.message}</p>
+                {!showBefore && !showHighlights && (
+                  <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
+                    <p className="text-green-200 text-sm">✨ This is the UPDATED content after fact-checking</p>
+                  </div>
+                )}
+                {!showBefore && showHighlights && (
+                  <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                    <p className="text-yellow-200 text-sm">💡 Yellow highlights show AI-rewritten sections (scroll to see all)</p>
+                  </div>
+                )}
+                
+                <div className="text-purple-300 text-sm">
+                  {Math.round(result.content.length / 1000)}K characters total
+                </div>
               </div>
+               <function_calls>
+<invoke name="artifacts">
+<parameter name="command">update</parameter>
+<parameter name="id">final-app-v14</parameter>
+<parameter name="new_str">            </div>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setView('dashboard')}
+            className="flex-1 bg-white bg-opacity-10 text-purple-300 py-4 rounded-xl font-semibold hover:bg-opacity-20 border border-white border-opacity-20"
+          >
+            ← Cancel
+          </button>
+          <button
+            onClick={publishToWebflow}
+            disabled={loading}
+            className="flex-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-2xl shadow-green-500/50"
+          >
+            {loading ? (
+              <><Loader className="w-5 h-5 animate-spin" />Publishing...</>
+            ) : (
+              <><CheckCircle className="w-5 h-5" />Publish to Webflow</>
             )}
-          </div>
-        )}
+          </button>
+        </div>
 
-        {/* Success */}
-        {view === 'success' && (
-          <div className="max-w-2xl mx-auto text-center py-12">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-12 h-12 text-green-600" />
-            </div>
-            <h2 className="text-3xl font-bold text-white mb-2">Published!</h2>
-            <p className="text-purple-200 mb-8">Content updated on Webflow</p>
-            <button
-              onClick={() => { setView('dashboard'); setResult(null); setSelectedBlog(null); }}
-              className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50"
-            >
-              ← Back to Dashboard
-            </button>
+        {status.message && (
+          <div className={`p-4 rounded-lg ${
+            status.type === 'error' ? 'bg-red-500 bg-opacity-20 border border-red-500 border-opacity-30' :
+            'bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30'
+          }`}>
+            <p className="text-white text-sm">{status.message}</p>
           </div>
         )}
       </div>
+    )}
 
-      {/* Footer */}
-      <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
-          <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing</p>
+    {/* Success */}
+    {view === 'success' && (
+      <div className="max-w-2xl mx-auto text-center py-12">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-12 h-12 text-green-600" />
         </div>
-      </footer>
+        <h2 className="text-3xl font-bold text-white mb-2">Published!</h2>
+        <p className="text-purple-200 mb-8">Content updated on Webflow</p>
+        <button
+          onClick={() => { setView('dashboard'); setResult(null); setSelectedBlog(null); }}
+          className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50"
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
+    )}
+  </div>
+
+  {/* Footer */}
+  <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
+    <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
+      <p>🔒 All API keys stored securely in your browser</p>
+      <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing</p>
     </div>
-  );
-}
+  </footer>
+</div>
+);
+}</parameter>
+<parameter name="old_str">            
+</parameter>
