@@ -122,6 +122,51 @@ export default function ContentOps() {
         // Escape special regex characters
         const escapedSentence = cleanUpdated.replace(/[.*+?^${}()|[\]\\]/g, '\\  const highlightChanges = (originalHtml, updatedHtml) => {
     if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
+    
+    // Strip HTML tags for comparison
+    const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const originalText = stripHtml(originalHtml);
+    const updatedText = stripHtml(updatedHtml);
+    
+    // If texts are identical, no changes
+    if (originalText === updatedText) return updatedHtml;
+    
+    // Split by sentences for better granularity
+    const originalSentences = originalText.match(/[^.!?]+[.!?]+/g) || [];
+    const updatedSentences = updatedText.match(/[^.!?]+[.!?]+/g) || [];
+    
+    let highlightedHtml = updatedHtml;
+    let highlightCount = 0;
+    
+    // Find sentences that are different
+    updatedSentences.forEach((updatedSentence, i) => {
+      const cleanUpdated = updatedSentence.trim();
+      const cleanOriginal = originalSentences[i]?.trim() || '';
+      
+      // Only highlight if sentence is significantly different (not just whitespace/punctuation)
+      if (cleanUpdated !== cleanOriginal && cleanUpdated.length > 30 && highlightCount < 20) {
+        // Escape special regex characters
+        const escapedSentence = cleanUpdated.replace(/[.*+?^${}()|[\]\\]/g, '\\');
+        
+        try {
+          // Find this sentence in the HTML (be careful with regex)
+          const sentenceRegex = new RegExp(escapedSentence.substring(0, 50), 'i');
+          
+          if (sentenceRegex.test(highlightedHtml)) {
+            highlightedHtml = highlightedHtml.replace(sentenceRegex, (match) => {
+              highlightCount++;
+              return `<mark style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b;">${match}</mark>`;
+            });
+          }
+        } catch (e) {
+          // Skip if regex fails
+        }
+      }
+    });
+    
+    return highlightedHtml;
+  };  const highlightChanges = (originalHtml, updatedHtml) => {
+    if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
     const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     const originalText = stripHtml(originalHtml);
     const updatedText = stripHtml(updatedHtml);
