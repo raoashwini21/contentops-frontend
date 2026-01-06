@@ -51,7 +51,6 @@ export default function ContentOps() {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
   const [showBefore, setShowBefore] = useState(false);
-  const [showHighlights, setShowHighlights] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [changeLocations, setChangeLocations] = useState([]);
