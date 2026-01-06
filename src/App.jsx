@@ -52,6 +52,8 @@ export default function ContentOps() {
   const [result, setResult] = useState(null);
   const [showBefore, setShowBefore] = useState(false);
   const [showHighlights, setShowHighlights] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -147,6 +149,7 @@ export default function ContentOps() {
         originalContent: blog.fieldData['post-body'] || '',
         duration: data.duration || 0
       });
+      setEditedContent(data.content || blog.fieldData['post-body']);
       setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${(data.duration/1000).toFixed(1)}s` });
       setView('review');
     } catch (error) {
@@ -168,7 +171,7 @@ export default function ContentOps() {
         body: JSON.stringify({
           fieldData: {
             name: selectedBlog.fieldData.name,
-            'post-body': result.content,
+            'post-body': editedContent,
             'post-summary': selectedBlog.fieldData['post-summary']
           }
         })
@@ -351,9 +354,14 @@ export default function ContentOps() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold text-white">📄 Content Preview:</h3>
                 <div className="flex gap-2">
-                  {!showBefore && (
+                  {!showBefore && !isEditing && (
                     <button onClick={() => setShowHighlights(!showHighlights)} className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all ${showHighlights ? 'bg-yellow-500 bg-opacity-20 border-yellow-500 border-opacity-30 text-yellow-200' : 'bg-white bg-opacity-10 border-white border-opacity-20 text-purple-300 hover:bg-opacity-20'}`}>
                       {showHighlights ? '✨ Highlights ON' : '⚪ Highlights OFF'}
+                    </button>
+                  )}
+                  {!showBefore && (
+                    <button onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditedContent(result.content); }} className="bg-purple-500 bg-opacity-20 hover:bg-opacity-30 text-purple-200 px-4 py-2 rounded-lg text-sm font-semibold border border-purple-500 border-opacity-30 transition-all">
+                      {isEditing ? '👁️ Preview' : '✏️ Edit HTML'}
                     </button>
                   )}
                   <button onClick={() => setShowBefore(!showBefore)} className="bg-white bg-opacity-10 hover:bg-opacity-20 text-purple-300 px-4 py-2 rounded-lg text-sm font-semibold border border-white border-opacity-20 transition-all">
@@ -361,27 +369,44 @@ export default function ContentOps() {
                   </button>
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-6 shadow-2xl max-h-[600px] overflow-y-auto">
-                <div className="prose prose-sm max-w-none text-gray-800" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.6' }} dangerouslySetInnerHTML={{ __html: highlightChanges(result.originalContent, result.content) }} />
-              </div>
-              <div className="mt-4 flex items-center justify-between">
-                {showBefore && (
-                  <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                    <p className="text-yellow-200 text-sm">👆 This is the ORIGINAL content from Webflow</p>
+              
+              {isEditing ? (
+                <div className="bg-gray-900 rounded-lg p-4 shadow-2xl">
+                  <textarea
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    className="w-full h-[600px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                    placeholder="Edit HTML content here..."
+                  />
+                  <div className="mt-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
+                    <p className="text-purple-200 text-sm">✏️ Editing mode: You can modify the HTML directly. Click "Preview" to see changes.</p>
                   </div>
-                )}
-                {!showBefore && !showHighlights && (
-                  <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
-                    <p className="text-green-200 text-sm">✨ This is the UPDATED content after fact-checking</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-white rounded-lg p-6 shadow-2xl h-[600px] overflow-y-auto">
+                    <div className="prose prose-sm max-w-none text-gray-800" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.6' }} dangerouslySetInnerHTML={{ __html: showBefore ? result.originalContent : (showHighlights ? highlightChanges(result.originalContent, editedContent) : editedContent) }} />
                   </div>
-                )}
-                {!showBefore && showHighlights && (
-                  <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                    <p className="text-yellow-200 text-sm">💡 Yellow highlights show AI-rewritten sections (scroll to see all)</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    {showBefore && (
+                      <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                        <p className="text-yellow-200 text-sm">👆 This is the ORIGINAL content from Webflow</p>
+                      </div>
+                    )}
+                    {!showBefore && !showHighlights && (
+                      <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
+                        <p className="text-green-200 text-sm">✨ This is the UPDATED content (click Edit HTML to modify)</p>
+                      </div>
+                    )}
+                    {!showBefore && showHighlights && (
+                      <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                        <p className="text-yellow-200 text-sm">💡 Yellow highlights show AI-rewritten sections (scroll to see all)</p>
+                      </div>
+                    )}
+                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K characters total</div>
                   </div>
-                )}
-                <div className="text-purple-300 text-sm">{Math.round(result.content.length / 1000)}K characters total</div>
-              </div>
+                </>
+              )}
             </div>
             <div className="flex gap-4">
               <button onClick={() => setView('dashboard')} className="flex-1 bg-white bg-opacity-10 text-purple-300 py-4 rounded-xl font-semibold hover:bg-opacity-20 border border-white border-opacity-20">← Cancel</button>
