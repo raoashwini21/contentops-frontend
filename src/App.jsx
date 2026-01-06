@@ -95,34 +95,55 @@ export default function ContentOps() {
   };
 
   const findChanges = (originalContent, updatedContent) => {
-    // Simple function to identify where changes occurred
+    // Detailed function to show before/after comparisons
     const changes = [];
     
-    // Extract section headings or first 100 chars of each paragraph
+    // Extract all content blocks (headings, paragraphs, lists)
     const extractSections = (html) => {
       const headings = html.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/gi) || [];
       const paragraphs = html.match(/<p[^>]*>.*?<\/p>/gi) || [];
-      return [...headings, ...paragraphs].slice(0, 20); // First 20 sections
+      const lists = html.match(/<li[^>]*>.*?<\/li>/gi) || [];
+      return [...headings, ...paragraphs, ...lists];
     };
     
     const originalSections = extractSections(originalContent);
     const updatedSections = extractSections(updatedContent);
     
-    updatedSections.forEach((section, i) => {
-      const cleanUpdated = section.replace(/<[^>]*>/g, '').trim();
-      const cleanOriginal = originalSections[i]?.replace(/<[^>]*>/g, '').trim() || '';
-      
-      if (cleanUpdated !== cleanOriginal && cleanUpdated.length > 20) {
-        const isHeading = section.match(/<h[1-6]/i);
-        changes.push({
-          location: isHeading ? 'Heading' : `Paragraph ${i + 1}`,
-          type: cleanOriginal ? 'Modified' : 'Added',
-          preview: cleanUpdated.substring(0, 80) + (cleanUpdated.length > 80 ? '...' : '')
-        });
-      }
-    });
+    // Compare each section
+    const maxSections = Math.max(originalSections.length, updatedSections.length);
     
-    return changes.slice(0, 15); // Limit to 15 most significant changes
+    for (let i = 0; i < maxSections; i++) {
+      const originalSection = originalSections[i] || '';
+      const updatedSection = updatedSections[i] || '';
+      
+      const cleanOriginal = originalSection.replace(/<[^>]*>/g, '').trim();
+      const cleanUpdated = updatedSection.replace(/<[^>]*>/g, '').trim();
+      
+      // Skip if sections are identical or too short
+      if (cleanUpdated === cleanOriginal || cleanUpdated.length < 20) continue;
+      
+      // Determine section type
+      const isHeading = updatedSection.match(/<h[1-6]/i);
+      const isList = updatedSection.match(/<li/i);
+      
+      let sectionType = 'Paragraph';
+      if (isHeading) sectionType = 'Heading';
+      if (isList) sectionType = 'List Item';
+      
+      // Determine change type
+      let changeType = 'Modified';
+      if (!cleanOriginal) changeType = 'Added';
+      if (!cleanUpdated) changeType = 'Removed';
+      
+      changes.push({
+        location: `${sectionType} ${i + 1}`,
+        type: changeType,
+        before: cleanOriginal.substring(0, 150) + (cleanOriginal.length > 150 ? '...' : ''),
+        after: cleanUpdated.substring(0, 150) + (cleanUpdated.length > 150 ? '...' : '')
+      });
+    }
+    
+    return changes.slice(0, 30); // Show up to 30 changes
   };
 
   const analyzeBlog = async (blog) => {
@@ -345,24 +366,54 @@ export default function ContentOps() {
               </div>
             </div>
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
-              <h3 className="text-2xl font-bold text-white mb-4">📍 Where Changes Were Made:</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-white">📍 What Claude Rewrote:</h3>
+                {changeLocations.length > 10 && (
+                  <span className="text-purple-300 text-sm">{changeLocations.length} changes • scroll to see all</span>
+                )}
+              </div>
               {changeLocations.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                   {changeLocations.map((change, i) => (
-                    <div key={i} className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                      <div className="flex items-center gap-2 mb-2">
+                    <div key={i} className="bg-white bg-opacity-5 rounded-lg p-5 border border-white border-opacity-10">
+                      <div className="flex items-center gap-2 mb-3">
                         <span className="px-2 py-1 bg-purple-500 bg-opacity-30 text-purple-200 text-xs font-semibold rounded">
                           {change.location}
                         </span>
                         <span className={`px-2 py-1 text-xs font-semibold rounded ${
                           change.type === 'Modified' 
                             ? 'bg-yellow-500 bg-opacity-30 text-yellow-200' 
-                            : 'bg-green-500 bg-opacity-30 text-green-200'
+                            : change.type === 'Added'
+                            ? 'bg-green-500 bg-opacity-30 text-green-200'
+                            : 'bg-red-500 bg-opacity-30 text-red-200'
                         }`}>
                           {change.type}
                         </span>
                       </div>
-                      <p className="text-purple-100 text-sm font-mono">"{change.preview}"</p>
+                      {change.type === 'Modified' && (
+                        <div className="space-y-2">
+                          <div className="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-20 rounded p-3">
+                            <p className="text-red-200 text-xs font-semibold mb-1">BEFORE:</p>
+                            <p className="text-purple-100 text-sm">{change.before}</p>
+                          </div>
+                          <div className="bg-green-500 bg-opacity-10 border border-green-500 border-opacity-20 rounded p-3">
+                            <p className="text-green-200 text-xs font-semibold mb-1">AFTER:</p>
+                            <p className="text-purple-100 text-sm">{change.after}</p>
+                          </div>
+                        </div>
+                      )}
+                      {change.type === 'Added' && (
+                        <div className="bg-green-500 bg-opacity-10 border border-green-500 border-opacity-20 rounded p-3">
+                          <p className="text-green-200 text-xs font-semibold mb-1">NEW CONTENT:</p>
+                          <p className="text-purple-100 text-sm">{change.after}</p>
+                        </div>
+                      )}
+                      {change.type === 'Removed' && (
+                        <div className="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-20 rounded p-3">
+                          <p className="text-red-200 text-xs font-semibold mb-1">REMOVED:</p>
+                          <p className="text-purple-100 text-sm">{change.before}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -374,12 +425,13 @@ export default function ContentOps() {
             </div>
 
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
-              <h3 className="text-2xl font-bold text-white mb-4">📝 Changes Made:</h3>
+              <h3 className="text-2xl font-bold text-white mb-4">📝 Summary of Updates:</h3>
+              <p className="text-purple-200 text-sm mb-4">High-level overview of what was fact-checked and rewritten:</p>
               {result.changes.length > 0 ? (
                 <ul className="space-y-2">
                   {result.changes.map((change, i) => (
                     <li key={i} className="text-purple-100 flex items-start gap-2">
-                      <span className="text-green-400">✓</span>
+                      <span className="text-green-400 mt-1">✓</span>
                       <span>{change}</span>
                     </li>
                   ))}
@@ -417,20 +469,31 @@ export default function ContentOps() {
                 </div>
               ) : (
                 <>
-                  <div className="bg-white rounded-lg p-6 shadow-2xl" style={{ maxHeight: 'none' }}>
-                    <div className="prose prose-sm max-w-none text-gray-800" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.6' }} dangerouslySetInnerHTML={{ __html: showBefore ? result.originalContent : editedContent }} />
+                  <div 
+                    className="bg-white rounded-lg p-8 shadow-2xl overflow-y-auto" 
+                    style={{ maxHeight: '800px' }}
+                  >
+                    <div 
+                      className="prose prose-lg max-w-none text-gray-800" 
+                      style={{ 
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', 
+                        lineHeight: '1.7',
+                        fontSize: '16px'
+                      }} 
+                      dangerouslySetInnerHTML={{ __html: showBefore ? result.originalContent : editedContent }} 
+                    />
                   </div>
                   <div className="mt-4 flex items-center justify-between">
                     {showBefore ? (
                       <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                        <p className="text-yellow-200 text-sm">👆 ORIGINAL content from Webflow</p>
+                        <p className="text-yellow-200 text-sm">👆 ORIGINAL content from Webflow (scroll to see full blog)</p>
                       </div>
                     ) : (
                       <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
-                        <p className="text-green-200 text-sm">✨ UPDATED content (click Edit HTML to modify)</p>
+                        <p className="text-green-200 text-sm">✨ UPDATED content (scroll to see full blog • click Edit HTML to modify)</p>
                       </div>
                     )}
-                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K characters • Full blog visible</div>
+                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K chars • {editedContent.split(/<p[^>]*>/).length - 1} paragraphs</div>
                   </div>
                 </>
               )}
