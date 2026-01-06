@@ -95,55 +95,75 @@ export default function ContentOps() {
   };
 
   const findChanges = (originalContent, updatedContent) => {
-    // Detailed function to show before/after comparisons
+    // Extract headings and track changes under each heading
     const changes = [];
     
-    // Extract all content blocks (headings, paragraphs, lists)
-    const extractSections = (html) => {
-      const headings = html.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/gi) || [];
-      const paragraphs = html.match(/<p[^>]*>.*?<\/p>/gi) || [];
-      const lists = html.match(/<li[^>]*>.*?<\/li>/gi) || [];
-      return [...headings, ...paragraphs, ...lists];
-    };
+    // Extract all headings from updated content
+    const headingRegex = /<h([1-6])[^>]*>(.*?)<\/h\1>/gi;
+    const headings = [...updatedContent.matchAll(headingRegex)];
     
-    const originalSections = extractSections(originalContent);
-    const updatedSections = extractSections(updatedContent);
-    
-    // Compare each section
-    const maxSections = Math.max(originalSections.length, updatedSections.length);
-    
-    for (let i = 0; i < maxSections; i++) {
-      const originalSection = originalSections[i] || '';
-      const updatedSection = updatedSections[i] || '';
-      
-      const cleanOriginal = originalSection.replace(/<[^>]*>/g, '').trim();
-      const cleanUpdated = updatedSection.replace(/<[^>]*>/g, '').trim();
-      
-      // Skip if sections are identical or too short
-      if (cleanUpdated === cleanOriginal || cleanUpdated.length < 20) continue;
-      
-      // Determine section type
-      const isHeading = updatedSection.match(/<h[1-6]/i);
-      const isList = updatedSection.match(/<li/i);
-      
-      let sectionType = 'Paragraph';
-      if (isHeading) sectionType = 'Heading';
-      if (isList) sectionType = 'List Item';
-      
-      // Determine change type
-      let changeType = 'Modified';
-      if (!cleanOriginal) changeType = 'Added';
-      if (!cleanUpdated) changeType = 'Removed';
-      
-      changes.push({
-        location: `${sectionType} ${i + 1}`,
-        type: changeType,
-        before: cleanOriginal.substring(0, 150) + (cleanOriginal.length > 150 ? '...' : ''),
-        after: cleanUpdated.substring(0, 150) + (cleanUpdated.length > 150 ? '...' : '')
-      });
+    if (headings.length === 0) {
+      return [{ heading: 'Content body', changeCount: 1, description: 'Content has been updated with fact-checks and rewrites' }];
     }
     
-    return changes.slice(0, 30); // Show up to 30 changes
+    // For each heading, check if content under it changed
+    for (let i = 0; i < headings.length; i++) {
+      const currentHeading = headings[i][2].replace(/<[^>]*>/g, '').trim();
+      const nextHeadingIndex = headings[i + 1] ? updatedContent.indexOf(headings[i + 1][0]) : updatedContent.length;
+      const currentHeadingIndex = updatedContent.indexOf(headings[i][0]);
+      
+      // Extract content between this heading and next
+      const updatedSection = updatedContent.substring(currentHeadingIndex, nextHeadingIndex);
+      
+      // Try to find same heading in original
+      const originalHeadingRegex = new RegExp(`<h[1-6][^>]*>${currentHeading}<\/h[1-6]>`, 'i');
+      const originalHeadingMatch = originalContent.match(originalHeadingRegex);
+      
+      if (originalHeadingMatch) {
+        const originalHeadingIndex = originalContent.indexOf(originalHeadingMatch[0]);
+        // Find next heading in original to get section boundary
+        let originalNextIndex = originalContent.length;
+        for (let j = i + 1; j < headings.length; j++) {
+          const searchHeading = headings[j][2].replace(/<[^>]*>/g, '').trim();
+          const searchRegex = new RegExp(`<h[1-6][^>]*>${searchHeading}<\/h[1-6]>`, 'i');
+          const match = originalContent.match(searchRegex);
+          if (match) {
+            originalNextIndex = originalContent.indexOf(match[0]);
+            break;
+          }
+        }
+        
+        const originalSection = originalContent.substring(originalHeadingIndex, originalNextIndex);
+        
+        // Compare content (strip HTML for comparison)
+        const cleanOriginal = originalSection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const cleanUpdated = updatedSection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        if (cleanOriginal !== cleanUpdated) {
+          // Count approximate number of changes (paragraphs that differ)
+          const originalParas = originalSection.match(/<p[^>]*>.*?<\/p>/gi) || [];
+          const updatedParas = updatedSection.match(/<p[^>]*>.*?<\/p>/gi) || [];
+          const changeCount = Math.abs(updatedParas.length - originalParas.length) + 
+                            Math.min(originalParas.length, updatedParas.length);
+          
+          changes.push({
+            heading: currentHeading,
+            changeCount: Math.max(1, changeCount),
+            description: `${changeCount} paragraph${changeCount > 1 ? 's' : ''} updated`
+          });
+        }
+      } else {
+        // New heading added
+        const paraCount = (updatedSection.match(/<p[^>]*>/g) || []).length;
+        changes.push({
+          heading: currentHeading,
+          changeCount: paraCount,
+          description: 'New section added'
+        });
+      }
+    }
+    
+    return changes.length > 0 ? changes : [{ heading: 'No changes detected', changeCount: 0, description: 'Content appears identical' }];
   };
 
   const analyzeBlog = async (blog) => {
@@ -367,53 +387,29 @@ export default function ContentOps() {
             </div>
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-white">📍 What Claude Rewrote:</h3>
-                {changeLocations.length > 10 && (
-                  <span className="text-purple-300 text-sm">{changeLocations.length} changes • scroll to see all</span>
+                <h3 className="text-2xl font-bold text-white">📍 Sections Updated:</h3>
+                {changeLocations.length > 1 && (
+                  <span className="text-purple-300 text-sm">{changeLocations.length} section{changeLocations.length > 1 ? 's' : ''} modified</span>
                 )}
               </div>
-              {changeLocations.length > 0 ? (
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+              {changeLocations.length > 0 && changeLocations[0].heading !== 'No changes detected' ? (
+                <div className="space-y-3">
                   {changeLocations.map((change, i) => (
-                    <div key={i} className="bg-white bg-opacity-5 rounded-lg p-5 border border-white border-opacity-10">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="px-2 py-1 bg-purple-500 bg-opacity-30 text-purple-200 text-xs font-semibold rounded">
-                          {change.location}
-                        </span>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded ${
-                          change.type === 'Modified' 
-                            ? 'bg-yellow-500 bg-opacity-30 text-yellow-200' 
-                            : change.type === 'Added'
-                            ? 'bg-green-500 bg-opacity-30 text-green-200'
-                            : 'bg-red-500 bg-opacity-30 text-red-200'
-                        }`}>
-                          {change.type}
-                        </span>
+                    <div key={i} className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10 hover:bg-opacity-10 transition-all">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-yellow-400 text-lg">📝</span>
+                            <h4 className="text-white font-semibold text-base">{change.heading}</h4>
+                          </div>
+                          <p className="text-purple-200 text-sm">{change.description}</p>
+                        </div>
+                        {change.changeCount > 0 && (
+                          <div className="ml-4 px-3 py-1 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-full">
+                            <span className="text-yellow-200 text-xs font-bold">{change.changeCount} change{change.changeCount > 1 ? 's' : ''}</span>
+                          </div>
+                        )}
                       </div>
-                      {change.type === 'Modified' && (
-                        <div className="space-y-2">
-                          <div className="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-20 rounded p-3">
-                            <p className="text-red-200 text-xs font-semibold mb-1">BEFORE:</p>
-                            <p className="text-purple-100 text-sm">{change.before}</p>
-                          </div>
-                          <div className="bg-green-500 bg-opacity-10 border border-green-500 border-opacity-20 rounded p-3">
-                            <p className="text-green-200 text-xs font-semibold mb-1">AFTER:</p>
-                            <p className="text-purple-100 text-sm">{change.after}</p>
-                          </div>
-                        </div>
-                      )}
-                      {change.type === 'Added' && (
-                        <div className="bg-green-500 bg-opacity-10 border border-green-500 border-opacity-20 rounded p-3">
-                          <p className="text-green-200 text-xs font-semibold mb-1">NEW CONTENT:</p>
-                          <p className="text-purple-100 text-sm">{change.after}</p>
-                        </div>
-                      )}
-                      {change.type === 'Removed' && (
-                        <div className="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-20 rounded p-3">
-                          <p className="text-red-200 text-xs font-semibold mb-1">REMOVED:</p>
-                          <p className="text-purple-100 text-sm">{change.before}</p>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -444,6 +440,18 @@ export default function ContentOps() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold text-white">📄 Content Preview:</h3>
                 <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      console.log('Original length:', result.originalContent.length);
+                      console.log('Updated length:', result.content.length);
+                      console.log('First 200 chars:', result.content.substring(0, 200));
+                      console.log('Last 200 chars:', result.content.substring(result.content.length - 200));
+                      alert(`Debug Info:\nOriginal: ${result.originalContent.length} chars\nUpdated: ${result.content.length} chars\n\nCheck console for full details`);
+                    }}
+                    className="bg-gray-500 bg-opacity-20 hover:bg-opacity-30 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-500 border-opacity-30 transition-all"
+                  >
+                    🔍 Debug
+                  </button>
                   <button onClick={() => setShowBefore(!showBefore)} className="bg-white bg-opacity-10 hover:bg-opacity-20 text-purple-300 px-4 py-2 rounded-lg text-sm font-semibold border border-white border-opacity-20 transition-all">
                     {showBefore ? '✨ Show After' : '⏮️ Show Before'}
                   </button>
@@ -486,14 +494,19 @@ export default function ContentOps() {
                   <div className="mt-4 flex items-center justify-between">
                     {showBefore ? (
                       <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                        <p className="text-yellow-200 text-sm">👆 ORIGINAL content from Webflow (scroll to see full blog)</p>
+                        <p className="text-yellow-200 text-sm">👆 ORIGINAL content from Webflow (scroll to see all)</p>
                       </div>
                     ) : (
                       <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
-                        <p className="text-green-200 text-sm">✨ UPDATED content (scroll to see full blog • click Edit HTML to modify)</p>
+                        <p className="text-green-200 text-sm">✨ UPDATED content (scroll to see all • Edit HTML to modify)</p>
                       </div>
                     )}
-                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K chars • {editedContent.split(/<p[^>]*>/).length - 1} paragraphs</div>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K chars • {(editedContent.match(/<p[^>]*>/g) || []).length} paragraphs</div>
+                      {editedContent.length < 5000 && (
+                        <div className="text-orange-300 text-xs">⚠️ Content may be incomplete from backend</div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
