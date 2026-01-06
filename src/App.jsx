@@ -96,6 +96,32 @@ export default function ContentOps() {
 
   const highlightChanges = (originalHtml, updatedHtml) => {
     if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
+    
+    // Strip HTML tags for comparison
+    const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const originalText = stripHtml(originalHtml);
+    const updatedText = stripHtml(updatedHtml);
+    
+    // If texts are identical, no changes
+    if (originalText === updatedText) return updatedHtml;
+    
+    // Split by sentences for better granularity
+    const originalSentences = originalText.match(/[^.!?]+[.!?]+/g) || [];
+    const updatedSentences = updatedText.match(/[^.!?]+[.!?]+/g) || [];
+    
+    let highlightedHtml = updatedHtml;
+    let highlightCount = 0;
+    
+    // Find sentences that are different
+    updatedSentences.forEach((updatedSentence, i) => {
+      const cleanUpdated = updatedSentence.trim();
+      const cleanOriginal = originalSentences[i]?.trim() || '';
+      
+      // Only highlight if sentence is significantly different (not just whitespace/punctuation)
+      if (cleanUpdated !== cleanOriginal && cleanUpdated.length > 30 && highlightCount < 20) {
+        // Escape special regex characters
+        const escapedSentence = cleanUpdated.replace(/[.*+?^${}()|[\]\\]/g, '\\  const highlightChanges = (originalHtml, updatedHtml) => {
+    if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
     const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     const originalText = stripHtml(originalHtml);
     const updatedText = stripHtml(updatedHtml);
@@ -115,6 +141,25 @@ export default function ContentOps() {
         });
       }
     }
+    return highlightedHtml;
+  };');
+        
+        try {
+          // Find this sentence in the HTML (be careful with regex)
+          const sentenceRegex = new RegExp(escapedSentence.substring(0, 50), 'i');
+          
+          if (sentenceRegex.test(highlightedHtml)) {
+            highlightedHtml = highlightedHtml.replace(sentenceRegex, (match) => {
+              highlightCount++;
+              return `<mark style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b;">${match}</mark>`;
+            });
+          }
+        } catch (e) {
+          // Skip if regex fails
+        }
+      }
+    });
+    
     return highlightedHtml;
   };
 
@@ -375,7 +420,7 @@ export default function ContentOps() {
                   <textarea
                     value={editedContent}
                     onChange={(e) => setEditedContent(e.target.value)}
-                    className="w-full h-[600px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                    className="w-full h-[700px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
                     placeholder="Edit HTML content here..."
                   />
                   <div className="mt-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
@@ -384,7 +429,7 @@ export default function ContentOps() {
                 </div>
               ) : (
                 <>
-                  <div className="bg-white rounded-lg p-6 shadow-2xl h-[600px] overflow-y-auto">
+                  <div className="bg-white rounded-lg p-6 shadow-2xl" style={{ maxHeight: 'none' }}>
                     <div className="prose prose-sm max-w-none text-gray-800" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.6' }} dangerouslySetInnerHTML={{ __html: showBefore ? result.originalContent : (showHighlights ? highlightChanges(result.originalContent, editedContent) : editedContent) }} />
                   </div>
                   <div className="mt-4 flex items-center justify-between">
@@ -400,10 +445,10 @@ export default function ContentOps() {
                     )}
                     {!showBefore && showHighlights && (
                       <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                        <p className="text-yellow-200 text-sm">💡 Yellow highlights show AI-rewritten sections (scroll to see all)</p>
+                        <p className="text-yellow-200 text-sm">💡 Yellow highlights show changed sentences only</p>
                       </div>
                     )}
-                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K characters total</div>
+                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K characters • Full blog visible below</div>
                   </div>
                 </>
               )}
