@@ -94,118 +94,35 @@ export default function ContentOps() {
     }
   };
 
-  const highlightChanges = (originalHtml, updatedHtml) => {
-    if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
+  const findChanges = (originalContent, updatedContent) => {
+    // Simple function to identify where changes occurred
+    const changes = [];
     
-    // Strip HTML tags for comparison
-    const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    const originalText = stripHtml(originalHtml);
-    const updatedText = stripHtml(updatedHtml);
+    // Extract section headings or first 100 chars of each paragraph
+    const extractSections = (html) => {
+      const headings = html.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/gi) || [];
+      const paragraphs = html.match(/<p[^>]*>.*?<\/p>/gi) || [];
+      return [...headings, ...paragraphs].slice(0, 20); // First 20 sections
+    };
     
-    // If texts are identical, no changes
-    if (originalText === updatedText) return updatedHtml;
+    const originalSections = extractSections(originalContent);
+    const updatedSections = extractSections(updatedContent);
     
-    // Split by sentences for better granularity
-    const originalSentences = originalText.match(/[^.!?]+[.!?]+/g) || [];
-    const updatedSentences = updatedText.match(/[^.!?]+[.!?]+/g) || [];
-    
-    let highlightedHtml = updatedHtml;
-    let highlightCount = 0;
-    
-    // Find sentences that are different
-    updatedSentences.forEach((updatedSentence, i) => {
-      const cleanUpdated = updatedSentence.trim();
-      const cleanOriginal = originalSentences[i]?.trim() || '';
+    updatedSections.forEach((section, i) => {
+      const cleanUpdated = section.replace(/<[^>]*>/g, '').trim();
+      const cleanOriginal = originalSections[i]?.replace(/<[^>]*>/g, '').trim() || '';
       
-      // Only highlight if sentence is significantly different (not just whitespace/punctuation)
-      if (cleanUpdated !== cleanOriginal && cleanUpdated.length > 30 && highlightCount < 20) {
-        // Escape special regex characters
-        const escapedSentence = cleanUpdated.replace(/[.*+?^${}()|[\]\\]/g, '\\  const highlightChanges = (originalHtml, updatedHtml) => {
-    if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
-    
-    // Strip HTML tags for comparison
-    const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    const originalText = stripHtml(originalHtml);
-    const updatedText = stripHtml(updatedHtml);
-    
-    // If texts are identical, no changes
-    if (originalText === updatedText) return updatedHtml;
-    
-    // Split by sentences for better granularity
-    const originalSentences = originalText.match(/[^.!?]+[.!?]+/g) || [];
-    const updatedSentences = updatedText.match(/[^.!?]+[.!?]+/g) || [];
-    
-    let highlightedHtml = updatedHtml;
-    let highlightCount = 0;
-    
-    // Find sentences that are different
-    updatedSentences.forEach((updatedSentence, i) => {
-      const cleanUpdated = updatedSentence.trim();
-      const cleanOriginal = originalSentences[i]?.trim() || '';
-      
-      // Only highlight if sentence is significantly different (not just whitespace/punctuation)
-      if (cleanUpdated !== cleanOriginal && cleanUpdated.length > 30 && highlightCount < 20) {
-        // Escape special regex characters
-        const escapedSentence = cleanUpdated.replace(/[.*+?^${}()|[\]\\]/g, '\\');
-        
-        try {
-          // Find this sentence in the HTML (be careful with regex)
-          const sentenceRegex = new RegExp(escapedSentence.substring(0, 50), 'i');
-          
-          if (sentenceRegex.test(highlightedHtml)) {
-            highlightedHtml = highlightedHtml.replace(sentenceRegex, (match) => {
-              highlightCount++;
-              return `<mark style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b;">${match}</mark>`;
-            });
-          }
-        } catch (e) {
-          // Skip if regex fails
-        }
-      }
-    });
-    
-    return highlightedHtml;
-  };  const highlightChanges = (originalHtml, updatedHtml) => {
-    if (!showHighlights || showBefore) return showBefore ? originalHtml : updatedHtml;
-    const stripHtml = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    const originalText = stripHtml(originalHtml);
-    const updatedText = stripHtml(updatedHtml);
-    if (originalText === updatedText) return updatedHtml;
-    const originalWords = originalText.split(' ');
-    const updatedWords = updatedText.split(' ');
-    let highlightedHtml = updatedHtml;
-    const chunkSize = 10;
-    for (let i = 0; i < updatedWords.length - chunkSize; i++) {
-      const updatedChunk = updatedWords.slice(i, i + chunkSize).join(' ');
-      const originalChunk = originalWords.slice(i, i + chunkSize).join(' ');
-      if (updatedChunk !== originalChunk && updatedChunk.length > 20) {
-        const escapedChunk = updatedChunk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(${escapedChunk})`, 'gi');
-        highlightedHtml = highlightedHtml.replace(regex, (match) => {
-          return `<span style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b; display: inline-block;">${match}</span>`;
+      if (cleanUpdated !== cleanOriginal && cleanUpdated.length > 20) {
+        const isHeading = section.match(/<h[1-6]/i);
+        changes.push({
+          location: isHeading ? 'Heading' : `Paragraph ${i + 1}`,
+          type: cleanOriginal ? 'Modified' : 'Added',
+          preview: cleanUpdated.substring(0, 80) + (cleanUpdated.length > 80 ? '...' : '')
         });
       }
-    }
-    return highlightedHtml;
-  };');
-        
-        try {
-          // Find this sentence in the HTML (be careful with regex)
-          const sentenceRegex = new RegExp(escapedSentence.substring(0, 50), 'i');
-          
-          if (sentenceRegex.test(highlightedHtml)) {
-            highlightedHtml = highlightedHtml.replace(sentenceRegex, (match) => {
-              highlightCount++;
-              return `<mark style="background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b;">${match}</mark>`;
-            });
-          }
-        } catch (e) {
-          // Skip if regex fails
-        }
-      }
     });
     
-    return highlightedHtml;
+    return changes.slice(0, 15); // Limit to 15 most significant changes
   };
 
   const analyzeBlog = async (blog) => {
@@ -309,7 +226,7 @@ export default function ContentOps() {
                 <span className="text-pink-300 text-sm font-semibold">Powered by Brave Search + Claude AI</span>
               </div>
               <h1 className="text-6xl font-bold text-white mb-4">Smart Content<br /><span className="bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">Fact-Checking</span></h1>
-              <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Visual highlights</p>
+              <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Change tracking</p>
               <p className="text-sm text-purple-300">15-20 second checks • 50% cheaper (Brave only for research)</p>
             </div>
             <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50">
@@ -319,7 +236,7 @@ export default function ContentOps() {
               {[
                 { icon: <Search className="w-8 h-8" />, title: 'Pure Brave Research', desc: 'Stage 1: Direct Brave API searches (no Claude costs)' },
                 { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Stage 2: Claude fixes errors, adds features, improves grammar' },
-                { icon: <TrendingUp className="w-8 h-8" />, title: 'Visual Highlights', desc: 'See exactly what changed with yellow highlights' }
+                { icon: <TrendingUp className="w-8 h-8" />, title: 'Change Tracking', desc: 'See exactly which sections were modified' }
               ].map((f, i) => (
                 <div key={i} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 mx-auto text-white shadow-lg shadow-pink-500/30">{f.icon}</div>
