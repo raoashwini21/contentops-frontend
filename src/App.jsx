@@ -41,6 +41,47 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 
 Return only the complete rewritten HTML content.`;
 
+// Simple diff function to highlight changes
+const createDiffHTML = (originalHTML, updatedHTML) => {
+  // Strip HTML tags for text comparison
+  const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  
+  // Split into sentences for better granularity
+  const originalSentences = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>/gi) || [];
+  const updatedSentences = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>/gi) || [];
+  
+  let diffHTML = '';
+  let changesCount = 0;
+  
+  // Create a map of original sentences for quick lookup
+  const originalMap = new Map();
+  originalSentences.forEach((sent, idx) => {
+    const cleaned = stripHTML(sent);
+    originalMap.set(cleaned, { html: sent, index: idx, used: false });
+  });
+  
+  updatedSentences.forEach((updatedSent) => {
+    const cleanedUpdated = stripHTML(updatedSent);
+    const match = originalMap.get(cleanedUpdated);
+    
+    if (match && !match.used) {
+      // No change - show as is
+      diffHTML += updatedSent;
+      match.used = true;
+    } else {
+      // Changed or new - highlight in yellow
+      const highlighted = updatedSent.replace(
+        /^(<[^>]+>)/,
+        `$1<span style="background-color: #fef3c7; padding: 2px 4px; border-left: 3px solid #f59e0b;">`
+      ).replace(/(<\/[^>]+>)$/, `</span>$1`);
+      diffHTML += highlighted;
+      changesCount++;
+    }
+  });
+  
+  return { html: diffHTML, changesCount };
+};
+
 export default function ContentOps() {
   const [view, setView] = useState('home');
   const [config, setConfig] = useState({ anthropicKey: '', braveKey: '', webflowKey: '', collectionId: '' });
@@ -50,10 +91,11 @@ export default function ContentOps() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
-  const [showBefore, setShowBefore] = useState(false);
+  const [viewMode, setViewMode] = useState('diff'); // 'diff', 'original', 'updated'
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [changeLocations, setChangeLocations] = useState([]);
+  const [diffData, setDiffData] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -95,10 +137,7 @@ export default function ContentOps() {
   };
 
   const findChanges = (originalContent, updatedContent) => {
-    // Extract headings and track changes under each heading
     const changes = [];
-    
-    // Extract all headings from updated content
     const headingRegex = /<h([1-6])[^>]*>(.*?)<\/h\1>/gi;
     const headings = [...updatedContent.matchAll(headingRegex)];
     
@@ -106,22 +145,18 @@ export default function ContentOps() {
       return [{ heading: 'Content body', changeCount: 1, description: 'Content has been updated with fact-checks and rewrites' }];
     }
     
-    // For each heading, check if content under it changed
     for (let i = 0; i < headings.length; i++) {
       const currentHeading = headings[i][2].replace(/<[^>]*>/g, '').trim();
       const nextHeadingIndex = headings[i + 1] ? updatedContent.indexOf(headings[i + 1][0]) : updatedContent.length;
       const currentHeadingIndex = updatedContent.indexOf(headings[i][0]);
       
-      // Extract content between this heading and next
       const updatedSection = updatedContent.substring(currentHeadingIndex, nextHeadingIndex);
       
-      // Try to find same heading in original
       const originalHeadingRegex = new RegExp(`<h[1-6][^>]*>${currentHeading}<\/h[1-6]>`, 'i');
       const originalHeadingMatch = originalContent.match(originalHeadingRegex);
       
       if (originalHeadingMatch) {
         const originalHeadingIndex = originalContent.indexOf(originalHeadingMatch[0]);
-        // Find next heading in original to get section boundary
         let originalNextIndex = originalContent.length;
         for (let j = i + 1; j < headings.length; j++) {
           const searchHeading = headings[j][2].replace(/<[^>]*>/g, '').trim();
@@ -135,12 +170,10 @@ export default function ContentOps() {
         
         const originalSection = originalContent.substring(originalHeadingIndex, originalNextIndex);
         
-        // Compare content (strip HTML for comparison)
         const cleanOriginal = originalSection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         const cleanUpdated = updatedSection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         
         if (cleanOriginal !== cleanUpdated) {
-          // Count approximate number of changes (paragraphs that differ)
           const originalParas = originalSection.match(/<p[^>]*>.*?<\/p>/gi) || [];
           const updatedParas = updatedSection.match(/<p[^>]*>.*?<\/p>/gi) || [];
           const changeCount = Math.abs(updatedParas.length - originalParas.length) + 
@@ -153,7 +186,6 @@ export default function ContentOps() {
           });
         }
       } else {
-        // New heading added
         const paraCount = (updatedSection.match(/<p[^>]*>/g) || []).length;
         changes.push({
           heading: currentHeading,
@@ -170,12 +202,16 @@ export default function ContentOps() {
     setSelectedBlog(blog);
     setLoading(true);
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
+    
+    // Store the FULL original content from Webflow
+    const fullOriginalContent = blog.fieldData['post-body'] || '';
+    
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          blogContent: blog.fieldData['post-body'] || '',
+          blogContent: fullOriginalContent,
           title: blog.fieldData.name,
           anthropicKey: config.anthropicKey,
           braveKey: config.braveKey,
@@ -188,20 +224,29 @@ export default function ContentOps() {
         throw new Error(errorData.error || 'Analysis failed');
       }
       const data = await response.json();
-      const locations = findChanges(blog.fieldData['post-body'] || '', data.content || blog.fieldData['post-body']);
+      
+      // Use the FULL original content, not the truncated one from backend
+      const updatedContent = data.content || fullOriginalContent;
+      
+      // Create diff highlighting
+      const diff = createDiffHTML(fullOriginalContent, updatedContent);
+      setDiffData(diff);
+      
+      const locations = findChanges(fullOriginalContent, updatedContent);
       setResult({
         changes: data.changes || [],
         searchesUsed: data.searchesUsed || 0,
         claudeCalls: data.claudeCalls || 0,
         sectionsUpdated: data.sectionsUpdated || 0,
-        content: data.content || blog.fieldData['post-body'],
-        originalContent: blog.fieldData['post-body'] || '',
+        content: updatedContent,
+        originalContent: fullOriginalContent, // Use full content
         duration: data.duration || 0
       });
       setChangeLocations(locations);
-      setEditedContent(data.content || blog.fieldData['post-body']);
-      setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${(data.duration/1000).toFixed(1)}s` });
+      setEditedContent(updatedContent);
+      setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${(data.duration/1000).toFixed(1)}s, ${diff.changesCount} changes highlighted` });
       setView('review');
+      setViewMode('diff'); // Start with diff view
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
       console.error('Analysis error:', error);
@@ -233,6 +278,16 @@ export default function ContentOps() {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getDisplayContent = () => {
+    if (viewMode === 'diff' && diffData) {
+      return diffData.html;
+    } else if (viewMode === 'original') {
+      return result.originalContent;
+    } else {
+      return editedContent;
     }
   };
 
@@ -268,7 +323,7 @@ export default function ContentOps() {
               </div>
               <h1 className="text-6xl font-bold text-white mb-4">Smart Content<br /><span className="bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">Fact-Checking</span></h1>
               <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Change tracking</p>
-              <p className="text-sm text-purple-300">15-20 second checks • 50% cheaper (Brave only for research)</p>
+              <p className="text-sm text-purple-300">15-20 second checks • Yellow highlights on changes only</p>
             </div>
             <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50">
               {savedConfig ? 'Go to Dashboard →' : 'Get Started →'}
@@ -277,7 +332,7 @@ export default function ContentOps() {
               {[
                 { icon: <Search className="w-8 h-8" />, title: 'Pure Brave Research', desc: 'Stage 1: Direct Brave API searches (no Claude costs)' },
                 { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Stage 2: Claude fixes errors, adds features, improves grammar' },
-                { icon: <TrendingUp className="w-8 h-8" />, title: 'Change Tracking', desc: 'See exactly which sections were modified' }
+                { icon: <TrendingUp className="w-8 h-8" />, title: 'Yellow Highlights', desc: 'See ONLY changed sections highlighted in yellow' }
               ].map((f, i) => (
                 <div key={i} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 mx-auto text-white shadow-lg shadow-pink-500/30">{f.icon}</div>
@@ -330,7 +385,7 @@ export default function ContentOps() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-white">Your Blog Posts</h2>
-                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite</p>
+                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite → Yellow Highlights</p>
               </div>
               <button onClick={fetchBlogs} disabled={loading} className="bg-white bg-opacity-10 text-pink-300 px-4 py-2 rounded-lg flex items-center gap-2 border border-white border-opacity-20 hover:bg-opacity-20">
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Refresh
@@ -369,22 +424,24 @@ export default function ContentOps() {
           <div className="max-w-5xl mx-auto space-y-6">
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-8 text-white">
               <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
-              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {result.sectionsUpdated} updates</p>
+              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {diffData?.changesCount || 0} sections highlighted</p>
             </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
                 <div className="text-purple-300 text-sm">🔍 Brave Searches</div>
                 <div className="text-white text-2xl font-bold">{result.searchesUsed}</div>
               </div>
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                <div className="text-purple-300 text-sm">✏️ Claude Rewrites</div>
-                <div className="text-white text-2xl font-bold">{result.claudeCalls}</div>
+                <div className="text-purple-300 text-sm">✨ Changes Highlighted</div>
+                <div className="text-white text-2xl font-bold">{diffData?.changesCount || 0}</div>
               </div>
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
                 <div className="text-purple-300 text-sm">⚡ Speed</div>
                 <div className="text-white text-2xl font-bold">{(result.duration/1000).toFixed(1)}s</div>
               </div>
             </div>
+
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold text-white">📍 Sections Updated:</h3>
@@ -421,45 +478,45 @@ export default function ContentOps() {
             </div>
 
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
-              <h3 className="text-2xl font-bold text-white mb-4">📝 Summary of Updates:</h3>
-              <p className="text-purple-200 text-sm mb-4">High-level overview of what was fact-checked and rewritten:</p>
-              {result.changes.length > 0 ? (
-                <ul className="space-y-2">
-                  {result.changes.map((change, i) => (
-                    <li key={i} className="text-purple-100 flex items-start gap-2">
-                      <span className="text-green-400 mt-1">✓</span>
-                      <span>{change}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-purple-300">No updates needed - content is current!</p>
-              )}
-            </div>
-            <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold text-white">📄 Content Preview:</h3>
                 <div className="flex gap-2">
                   <button 
-                    onClick={() => {
-                      console.log('Original length:', result.originalContent.length);
-                      console.log('Updated length:', result.content.length);
-                      console.log('First 200 chars:', result.content.substring(0, 200));
-                      console.log('Last 200 chars:', result.content.substring(result.content.length - 200));
-                      alert(`Debug Info:\nOriginal: ${result.originalContent.length} chars\nUpdated: ${result.content.length} chars\n\nCheck console for full details`);
-                    }}
-                    className="bg-gray-500 bg-opacity-20 hover:bg-opacity-30 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-500 border-opacity-30 transition-all"
+                    onClick={() => setViewMode('diff')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'diff' 
+                        ? 'bg-yellow-500 bg-opacity-30 text-yellow-200 border border-yellow-500 border-opacity-40' 
+                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
+                    }`}
                   >
-                    🔍 Debug
+                    ✨ Changes Only
                   </button>
-                  <button onClick={() => setShowBefore(!showBefore)} className="bg-white bg-opacity-10 hover:bg-opacity-20 text-purple-300 px-4 py-2 rounded-lg text-sm font-semibold border border-white border-opacity-20 transition-all">
-                    {showBefore ? '✨ Show After' : '⏮️ Show Before'}
+                  <button 
+                    onClick={() => setViewMode('original')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'original' 
+                        ? 'bg-gray-500 bg-opacity-30 text-gray-200 border border-gray-500 border-opacity-40' 
+                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
+                    }`}
+                  >
+                    ⏮️ Original
                   </button>
-                  {!showBefore && (
-                    <button onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditedContent(result.content); }} className="bg-purple-500 bg-opacity-20 hover:bg-opacity-30 text-purple-200 px-4 py-2 rounded-lg text-sm font-semibold border border-purple-500 border-opacity-30 transition-all">
-                      {isEditing ? '👁️ Preview' : '✏️ Edit HTML'}
-                    </button>
-                  )}
+                  <button 
+                    onClick={() => setViewMode('updated')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'updated' 
+                        ? 'bg-green-500 bg-opacity-30 text-green-200 border border-green-500 border-opacity-40' 
+                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
+                    }`}
+                  >
+                    ✅ Updated
+                  </button>
+                  <button 
+                    onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditedContent(result.content); }} 
+                    className="bg-purple-500 bg-opacity-20 hover:bg-opacity-30 text-purple-200 px-4 py-2 rounded-lg text-sm font-semibold border border-purple-500 border-opacity-30 transition-all"
+                  >
+                    {isEditing ? '👁️ Preview' : '✏️ Edit HTML'}
+                  </button>
                 </div>
               </div>
               
@@ -488,29 +545,29 @@ export default function ContentOps() {
                         lineHeight: '1.7',
                         fontSize: '16px'
                       }} 
-                      dangerouslySetInnerHTML={{ __html: showBefore ? result.originalContent : editedContent }} 
+                      dangerouslySetInnerHTML={{ __html: getDisplayContent() }} 
                     />
                   </div>
                   <div className="mt-4 flex items-center justify-between">
-                    {showBefore ? (
+                    {viewMode === 'diff' ? (
                       <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                        <p className="text-yellow-200 text-sm">👆 ORIGINAL content from Webflow (scroll to see all)</p>
+                        <p className="text-yellow-200 text-sm">✨ CHANGES HIGHLIGHTED in yellow • {diffData?.changesCount || 0} sections modified</p>
+                      </div>
+                    ) : viewMode === 'original' ? (
+                      <div className="px-4 py-2 bg-gray-500 bg-opacity-20 border border-gray-500 border-opacity-30 rounded-lg">
+                        <p className="text-gray-200 text-sm">👆 ORIGINAL content from Webflow</p>
                       </div>
                     ) : (
                       <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
-                        <p className="text-green-200 text-sm">✨ UPDATED content (scroll to see all • Edit HTML to modify)</p>
+                        <p className="text-green-200 text-sm">✅ UPDATED content (no highlighting)</p>
                       </div>
                     )}
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K chars • {(editedContent.match(/<p[^>]*>/g) || []).length} paragraphs</div>
-                      {editedContent.length < 5000 && (
-                        <div className="text-orange-300 text-xs">⚠️ Content may be incomplete from backend</div>
-                      )}
-                    </div>
+                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K chars • Full content preserved</div>
                   </div>
                 </>
               )}
             </div>
+            
             <div className="flex gap-4">
               <button onClick={() => setView('dashboard')} className="flex-1 bg-white bg-opacity-10 text-purple-300 py-4 rounded-xl font-semibold hover:bg-opacity-20 border border-white border-opacity-20">← Cancel</button>
               <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-2xl shadow-green-500/50">
@@ -542,7 +599,7 @@ export default function ContentOps() {
       <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
           <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing</p>
+          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing → Yellow Highlights</p>
         </div>
       </footer>
     </div>
