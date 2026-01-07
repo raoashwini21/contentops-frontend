@@ -43,18 +43,15 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 
 Return only the complete rewritten HTML content.`;
 
-// Extract changed sections for side-by-side comparison
 const extractChangedSections = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  // Extract all block elements
   const originalBlocks = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>|<div[^>]*>.*?<\/div>/gi) || [];
   const updatedBlocks = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>|<div[^>]*>.*?<\/div>/gi) || [];
   
   const changes = [];
   const originalMap = new Map();
   
-  // Map original blocks by cleaned content
   originalBlocks.forEach((block, idx) => {
     const cleaned = stripHTML(block);
     if (cleaned) {
@@ -64,17 +61,12 @@ const extractChangedSections = (originalHTML, updatedHTML) => {
   
   let changesCount = 0;
   
-  // Find changed blocks
   updatedBlocks.forEach((updatedBlock, idx) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
     
     if (!match) {
-      // This block was changed or is new
-      // Find closest original block by index
       let originalBlock = originalBlocks[idx] || originalBlocks[Math.min(idx, originalBlocks.length - 1)];
-      
-      // Check if this is genuinely different
       const cleanedOriginal = stripHTML(originalBlock);
       if (cleanedOriginal !== cleanedUpdated) {
         changes.push({
@@ -100,7 +92,7 @@ export default function ContentOps() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
-  const [viewMode, setViewMode] = useState('changes'); // 'changes', 'full'
+  const [viewMode, setViewMode] = useState('changes');
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [changedSections, setChangedSections] = useState(null);
@@ -350,4 +342,193 @@ export default function ContentOps() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {blogs.map(blog => (
-                  <div key={blog.id} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-xl p-6 border border-white border-opacity-10 hover:border-opacity-30 transition-all group
+                  <div key={blog.id} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-xl p-6 border border-white border-opacity-10 hover:border-opacity-30 transition-all group">
+                    <h3 className="font-semibold text-white mb-2 line-clamp-2">{blog.fieldData.name}</h3>
+                    <p className="text-sm text-purple-200 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
+                    <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 shadow-lg shadow-pink-500/30 group-hover:shadow-pink-500/50">
+                      {loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : '⚡ Smart Check'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {status.message && (
+              <div className={`mt-6 p-4 rounded-lg flex items-center gap-2 ${status.type === 'error' ? 'bg-red-500 bg-opacity-20 border border-red-500 border-opacity-30' : 'bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30'}`}>
+                {status.type === 'error' && <AlertCircle className="w-5 h-5 text-red-300" />}
+                {status.type === 'success' && <CheckCircle className="w-5 h-5 text-green-300" />}
+                {status.type === 'info' && <Loader className="w-5 h-5 text-blue-300 animate-spin" />}
+                <p className="text-white text-sm">{status.message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === 'review' && result && (
+          <div className="max-w-7xl mx-auto space-y-6">
+            <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-8 text-white">
+              <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
+              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {changedSections?.changesCount || 0} sections changed</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
+                <div className="text-purple-300 text-sm">🔍 Brave Searches</div>
+                <div className="text-white text-2xl font-bold">{result.searchesUsed}</div>
+              </div>
+              <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
+                <div className="text-purple-300 text-sm">✨ Changes</div>
+                <div className="text-white text-2xl font-bold">{changedSections?.changesCount || 0}</div>
+              </div>
+              <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
+                <div className="text-purple-300 text-sm">⚡ Speed</div>
+                <div className="text-white text-2xl font-bold">{(result.duration/1000).toFixed(1)}s</div>
+              </div>
+            </div>
+
+            <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">📄 Content Review:</h3>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setViewMode('changes')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'changes' 
+                        ? 'bg-yellow-500 bg-opacity-30 text-yellow-200 border border-yellow-500 border-opacity-40' 
+                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
+                    }`}
+                  >
+                    ✨ Changes Only
+                  </button>
+                  <button 
+                    onClick={() => setViewMode('full')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'full' 
+                        ? 'bg-green-500 bg-opacity-30 text-green-200 border border-green-500 border-opacity-40' 
+                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
+                    }`}
+                  >
+                    📝 Full Content
+                  </button>
+                  <button 
+                    onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditedContent(result.content); }} 
+                    className="bg-purple-500 bg-opacity-20 hover:bg-opacity-30 text-purple-200 px-4 py-2 rounded-lg text-sm font-semibold border border-purple-500 border-opacity-30 transition-all"
+                  >
+                    {isEditing ? '👁️ Preview' : '✏️ Edit HTML'}
+                  </button>
+                </div>
+              </div>
+
+              {isEditing ? (
+                <div className="bg-gray-900 rounded-lg p-4 shadow-2xl">
+                  <textarea
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    className="w-full h-[700px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                    placeholder="Edit HTML content here..."
+                  />
+                  <div className="mt-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
+                    <p className="text-purple-200 text-sm">✏️ Editing mode: Modify HTML directly. Click "Preview" to see changes.</p>
+                  </div>
+                </div>
+              ) : viewMode === 'changes' ? (
+                <div className="space-y-6">
+                  {changedSections && changedSections.changes.length > 0 ? (
+                    <>
+                      <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                        <p className="text-yellow-200 text-sm">✨ Showing {changedSections.changesCount} changed sections • Side-by-side comparison</p>
+                      </div>
+                      {changedSections.changes.map((change, idx) => (
+                        <div key={idx} className="bg-white bg-opacity-5 rounded-xl p-6 border border-white border-opacity-10">
+                          <div className="mb-3 flex items-center gap-2">
+                            <span className="px-3 py-1 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-full text-yellow-200 text-xs font-bold">
+                              Change #{idx + 1}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="bg-red-500 bg-opacity-5 rounded-lg p-4 border border-red-500 border-opacity-20">
+                              <div className="text-red-300 text-xs font-bold mb-2 uppercase tracking-wide">❌ Before</div>
+                              <div 
+                                className="prose prose-sm max-w-none text-gray-300"
+                                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
+                                dangerouslySetInnerHTML={{ __html: change.before }}
+                              />
+                            </div>
+                            <div className="bg-green-500 bg-opacity-10 rounded-lg p-4 border border-green-500 border-opacity-30">
+                              <div className="text-green-300 text-xs font-bold mb-2 uppercase tracking-wide">✅ After</div>
+                              <div 
+                                className="prose prose-sm max-w-none text-white"
+                                style={{ 
+                                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                                  backgroundColor: '#fef3c7',
+                                  padding: '8px',
+                                  borderRadius: '4px',
+                                  color: '#1f2937'
+                                }}
+                                dangerouslySetInnerHTML={{ __html: change.after }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="bg-white bg-opacity-5 rounded-lg p-8 border border-white border-opacity-10 text-center">
+                      <p className="text-purple-300 text-lg">✨ No changes detected - content is already perfect!</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div 
+                  className="bg-white rounded-lg p-8 shadow-2xl overflow-y-auto" 
+                  style={{ maxHeight: '800px' }}
+                >
+                  <div 
+                    className="prose prose-lg max-w-none text-gray-800" 
+                    style={{ 
+                      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', 
+                      lineHeight: '1.7',
+                      fontSize: '16px'
+                    }} 
+                    dangerouslySetInnerHTML={{ __html: editedContent }} 
+                  />
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-4">
+              <button onClick={() => setView('dashboard')} className="flex-1 bg-white bg-opacity-10 text-purple-300 py-4 rounded-xl font-semibold hover:bg-opacity-20 border border-white border-opacity-20">← Cancel</button>
+              <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-2xl shadow-green-500/50">
+                {loading ? <><Loader className="w-5 h-5 animate-spin" />Publishing...</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}
+              </button>
+            </div>
+            {status.message && (
+              <div className={`p-4 rounded-lg ${status.type === 'error' ? 'bg-red-500 bg-opacity-20 border border-red-500 border-opacity-30' : 'bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30'}`}>
+                <p className="text-white text-sm">{status.message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === 'success' && (
+          <div className="max-w-2xl mx-auto text-center py-12">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-12 h-12 text-green-600" />
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-2">Published!</h2>
+            <p className="text-purple-200 mb-8">Content updated on Webflow</p>
+            <button onClick={() => { setView('dashboard'); setResult(null); setSelectedBlog(null); }} className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50">
+              ← Back to Dashboard
+            </button>
+          </div>
+        )}
+      </div>
+
+      <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
+        <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
+          <p>🔒 All API keys stored securely in your browser</p>
+          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing → Side-by-Side Diff</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
