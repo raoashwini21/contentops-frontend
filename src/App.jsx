@@ -43,42 +43,52 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 
 Return only the complete rewritten HTML content.`;
 
-// Simple diff function to highlight changes
-const createDiffHTML = (originalHTML, updatedHTML) => {
+// Extract changed sections for side-by-side comparison
+const extractChangedSections = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  const originalSentences = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>/gi) || [];
-  const updatedSentences = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>/gi) || [];
+  // Extract all block elements
+  const originalBlocks = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>|<div[^>]*>.*?<\/div>/gi) || [];
+  const updatedBlocks = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>|<div[^>]*>.*?<\/div>/gi) || [];
   
-  let diffHTML = '';
+  const changes = [];
+  const originalMap = new Map();
+  
+  // Map original blocks by cleaned content
+  originalBlocks.forEach((block, idx) => {
+    const cleaned = stripHTML(block);
+    if (cleaned) {
+      originalMap.set(cleaned, { html: block, index: idx });
+    }
+  });
+  
   let changesCount = 0;
   
-  const originalMap = new Map();
-  originalSentences.forEach((sent, idx) => {
-    const cleaned = stripHTML(sent);
-    if (cleaned) {
-      originalMap.set(cleaned, { html: sent, index: idx, used: false });
-    }
-  });
-  
-  updatedSentences.forEach((updatedSent) => {
-    const cleanedUpdated = stripHTML(updatedSent);
+  // Find changed blocks
+  updatedBlocks.forEach((updatedBlock, idx) => {
+    const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
     
-    if (match && !match.used) {
-      diffHTML += updatedSent;
-      match.used = true;
-    } else {
-      const highlighted = updatedSent.replace(
-        /^(<[^>]+>)/,
-        `$1<span style="background-color: #fef3c7; padding: 2px 4px; border-left: 3px solid #f59e0b; display: inline-block; width: 100%;">`
-      ).replace(/(<\/[^>]+>)$/, `</span>$1`);
-      diffHTML += highlighted;
-      changesCount++;
+    if (!match) {
+      // This block was changed or is new
+      // Find closest original block by index
+      let originalBlock = originalBlocks[idx] || originalBlocks[Math.min(idx, originalBlocks.length - 1)];
+      
+      // Check if this is genuinely different
+      const cleanedOriginal = stripHTML(originalBlock);
+      if (cleanedOriginal !== cleanedUpdated) {
+        changes.push({
+          before: originalBlock,
+          after: updatedBlock,
+          index: idx,
+          type: 'modified'
+        });
+        changesCount++;
+      }
     }
   });
   
-  return { html: diffHTML, changesCount };
+  return { changes, changesCount };
 };
 
 export default function ContentOps() {
@@ -90,10 +100,10 @@ export default function ContentOps() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
-  const [viewMode, setViewMode] = useState('diff');
+  const [viewMode, setViewMode] = useState('changes'); // 'changes', 'full'
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
-  const [diffData, setDiffData] = useState(null);
+  const [changedSections, setChangedSections] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -164,9 +174,8 @@ export default function ContentOps() {
       const data = await response.json();
       let updatedContent = data.content || fullOriginalContent;
       
-      // Check if backend returned truncated content
       const returnedCharCount = updatedContent.length;
-      const truncationThreshold = 0.7; // If returned content is less than 70% of original, it's likely truncated
+      const truncationThreshold = 0.7;
       
       if (returnedCharCount < originalCharCount * truncationThreshold) {
         console.warn(`⚠️ Backend may have truncated content. Original: ${originalCharCount} chars, Returned: ${returnedCharCount} chars`);
@@ -174,11 +183,11 @@ export default function ContentOps() {
           type: 'error', 
           message: `⚠️ Backend returned incomplete content (${Math.round(returnedCharCount/originalCharCount*100)}% of original). Using original content. Check backend token limits.` 
         });
-        updatedContent = fullOriginalContent; // Fallback to original
+        updatedContent = fullOriginalContent;
       }
       
-      const diff = createDiffHTML(fullOriginalContent, updatedContent);
-      setDiffData(diff);
+      const sections = extractChangedSections(fullOriginalContent, updatedContent);
+      setChangedSections(sections);
       
       setResult({
         changes: data.changes || [],
@@ -195,10 +204,10 @@ export default function ContentOps() {
         type: returnedCharCount < originalCharCount * truncationThreshold ? 'error' : 'success', 
         message: returnedCharCount < originalCharCount * truncationThreshold 
           ? `⚠️ Content truncated by backend. Using original. ${data.searchesUsed} searches, ${(data.duration/1000).toFixed(1)}s`
-          : `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${diff.changesCount} changes, ${(data.duration/1000).toFixed(1)}s` 
+          : `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${sections.changesCount} changes, ${(data.duration/1000).toFixed(1)}s` 
       });
       setView('review');
-      setViewMode('diff');
+      setViewMode('changes');
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
       console.error('Analysis error:', error);
@@ -233,16 +242,6 @@ export default function ContentOps() {
     }
   };
 
-  const getDisplayContent = () => {
-    if (viewMode === 'diff' && diffData) {
-      return diffData.html;
-    } else if (viewMode === 'original') {
-      return result.originalContent;
-    } else {
-      return editedContent;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
       <nav className="bg-black bg-opacity-30 backdrop-blur-xl border-b border-white border-opacity-10">
@@ -274,8 +273,8 @@ export default function ContentOps() {
                 <span className="text-pink-300 text-sm font-semibold">Powered by Brave Search + Claude AI</span>
               </div>
               <h1 className="text-6xl font-bold text-white mb-4">Smart Content<br /><span className="bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">Fact-Checking</span></h1>
-              <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Change tracking</p>
-              <p className="text-sm text-purple-300">15-20 second checks • Yellow highlights on changes only</p>
+              <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Side-by-side diff view</p>
+              <p className="text-sm text-purple-300">15-20 second checks • See only what changed</p>
             </div>
             <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50">
               {savedConfig ? 'Go to Dashboard →' : 'Get Started →'}
@@ -284,7 +283,7 @@ export default function ContentOps() {
               {[
                 { icon: <Search className="w-8 h-8" />, title: 'Pure Brave Research', desc: 'Stage 1: Direct Brave API searches (no Claude costs)' },
                 { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Stage 2: Claude fixes errors, adds features, improves grammar' },
-                { icon: <TrendingUp className="w-8 h-8" />, title: 'Yellow Highlights', desc: 'See ONLY changed sections highlighted in yellow' }
+                { icon: <TrendingUp className="w-8 h-8" />, title: 'Side-by-Side Diff', desc: 'See ONLY changed sections: before vs after' }
               ].map((f, i) => (
                 <div key={i} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 mx-auto text-white shadow-lg shadow-pink-500/30">{f.icon}</div>
@@ -337,7 +336,7 @@ export default function ContentOps() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-white">Your Blog Posts</h2>
-                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite → Yellow Highlights</p>
+                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite → Side-by-Side Diff</p>
               </div>
               <button onClick={fetchBlogs} disabled={loading} className="bg-white bg-opacity-10 text-pink-300 px-4 py-2 rounded-lg flex items-center gap-2 border border-white border-opacity-20 hover:bg-opacity-20">
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Refresh
@@ -351,176 +350,4 @@ export default function ContentOps() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {blogs.map(blog => (
-                  <div key={blog.id} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-xl p-6 border border-white border-opacity-10 hover:border-opacity-30 transition-all group">
-                    <h3 className="font-semibold text-white mb-2 line-clamp-2">{blog.fieldData.name}</h3>
-                    <p className="text-sm text-purple-200 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
-                    <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 shadow-lg shadow-pink-500/30 group-hover:shadow-pink-500/50">
-                      {loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : '⚡ Smart Check'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {status.message && (
-              <div className={`mt-6 p-4 rounded-lg flex items-center gap-2 ${status.type === 'error' ? 'bg-red-500 bg-opacity-20 border border-red-500 border-opacity-30' : 'bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30'}`}>
-                {status.type === 'error' && <AlertCircle className="w-5 h-5 text-red-300" />}
-                {status.type === 'success' && <CheckCircle className="w-5 h-5 text-green-300" />}
-                {status.type === 'info' && <Loader className="w-5 h-5 text-blue-300 animate-spin" />}
-                <p className="text-white text-sm">{status.message}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {view === 'review' && result && (
-          <div className="max-w-5xl mx-auto space-y-6">
-            <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-8 text-white">
-              <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
-              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {diffData?.changesCount || 0} changes highlighted</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                <div className="text-purple-300 text-sm">🔍 Brave Searches</div>
-                <div className="text-white text-2xl font-bold">{result.searchesUsed}</div>
-              </div>
-              <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                <div className="text-purple-300 text-sm">✨ Changes</div>
-                <div className="text-white text-2xl font-bold">{diffData?.changesCount || 0}</div>
-              </div>
-              <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                <div className="text-purple-300 text-sm">⚡ Speed</div>
-                <div className="text-white text-2xl font-bold">{(result.duration/1000).toFixed(1)}s</div>
-              </div>
-            </div>
-
-            <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-white">📄 Content Preview:</h3>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setViewMode('diff')} 
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      viewMode === 'diff' 
-                        ? 'bg-yellow-500 bg-opacity-30 text-yellow-200 border border-yellow-500 border-opacity-40' 
-                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
-                    }`}
-                  >
-                    ✨ Changes Only
-                  </button>
-                  <button 
-                    onClick={() => setViewMode('original')} 
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      viewMode === 'original' 
-                        ? 'bg-gray-500 bg-opacity-30 text-gray-200 border border-gray-500 border-opacity-40' 
-                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
-                    }`}
-                  >
-                    ⏮️ Original
-                  </button>
-                  <button 
-                    onClick={() => setViewMode('updated')} 
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      viewMode === 'updated' 
-                        ? 'bg-green-500 bg-opacity-30 text-green-200 border border-green-500 border-opacity-40' 
-                        : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
-                    }`}
-                  >
-                    ✅ Updated
-                  </button>
-                  <button 
-                    onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditedContent(result.content); }} 
-                    className="bg-purple-500 bg-opacity-20 hover:bg-opacity-30 text-purple-200 px-4 py-2 rounded-lg text-sm font-semibold border border-purple-500 border-opacity-30 transition-all"
-                  >
-                    {isEditing ? '👁️ Preview' : '✏️ Edit HTML'}
-                  </button>
-                </div>
-              </div>
-              
-              {isEditing ? (
-                <div className="bg-gray-900 rounded-lg p-4 shadow-2xl">
-                  <textarea
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    className="w-full h-[700px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                    placeholder="Edit HTML content here..."
-                  />
-                  <div className="mt-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
-                    <p className="text-purple-200 text-sm">✏️ Editing mode: Modify HTML directly. Click "Preview" to see changes.</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div 
-                    className="bg-white rounded-lg p-8 shadow-2xl overflow-y-auto" 
-                    style={{ maxHeight: '800px' }}
-                  >
-                    <div 
-                      className="prose prose-lg max-w-none text-gray-800" 
-                      style={{ 
-                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', 
-                        lineHeight: '1.7',
-                        fontSize: '16px'
-                      }} 
-                      dangerouslySetInnerHTML={{ __html: getDisplayContent() }} 
-                    />
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    {viewMode === 'diff' ? (
-                      <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                        <p className="text-yellow-200 text-sm">✨ CHANGES HIGHLIGHTED in yellow • {diffData?.changesCount || 0} sections modified</p>
-                      </div>
-                    ) : viewMode === 'original' ? (
-                      <div className="px-4 py-2 bg-gray-500 bg-opacity-20 border border-gray-500 border-opacity-30 rounded-lg">
-                        <p className="text-gray-200 text-sm">👆 ORIGINAL content from Webflow</p>
-                      </div>
-                    ) : (
-                      <div className="px-4 py-2 bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-lg">
-                        <p className="text-green-200 text-sm">✅ UPDATED content (no highlighting)</p>
-                      </div>
-                    )}
-                    <div className="text-purple-300 text-sm">
-                      {Math.round(editedContent.length / 1000)}K chars • {Math.round(result.originalContent.length / 1000)}K original
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <div className="flex gap-4">
-              <button onClick={() => setView('dashboard')} className="flex-1 bg-white bg-opacity-10 text-purple-300 py-4 rounded-xl font-semibold hover:bg-opacity-20 border border-white border-opacity-20">← Cancel</button>
-              <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-2xl shadow-green-500/50">
-                {loading ? <><Loader className="w-5 h-5 animate-spin" />Publishing...</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}
-              </button>
-            </div>
-            {status.message && (
-              <div className={`p-4 rounded-lg ${status.type === 'error' ? 'bg-red-500 bg-opacity-20 border border-red-500 border-opacity-30' : 'bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30'}`}>
-                <p className="text-white text-sm">{status.message}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {view === 'success' && (
-          <div className="max-w-2xl mx-auto text-center py-12">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-12 h-12 text-green-600" />
-            </div>
-            <h2 className="text-3xl font-bold text-white mb-2">Published!</h2>
-            <p className="text-purple-200 mb-8">Content updated on Webflow</p>
-            <button onClick={() => { setView('dashboard'); setResult(null); setSelectedBlog(null); }} className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50">
-              ← Back to Dashboard
-            </button>
-          </div>
-        )}
-      </div>
-
-      <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
-          <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing → Yellow Highlights</p>
-        </div>
-      </footer>
-    </div>
-  );
-}
+                  <div key={blog.id} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-xl p-6 border border-white border-opacity-10 hover:border-opacity-30 transition-all group
