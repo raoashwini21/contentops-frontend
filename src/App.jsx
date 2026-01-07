@@ -39,25 +39,26 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links
 5. Add TL;DR if missing at the very start: 3-4 sentences covering main points
 
+**CRITICAL: Return the COMPLETE HTML content. Do not truncate or summarize. Return every single paragraph, heading, and section from the original with your edits applied.**
+
 Return only the complete rewritten HTML content.`;
 
 // Simple diff function to highlight changes
 const createDiffHTML = (originalHTML, updatedHTML) => {
-  // Strip HTML tags for text comparison
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  // Split into sentences for better granularity
-  const originalSentences = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>/gi) || [];
-  const updatedSentences = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>/gi) || [];
+  const originalSentences = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>/gi) || [];
+  const updatedSentences = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>/gi) || [];
   
   let diffHTML = '';
   let changesCount = 0;
   
-  // Create a map of original sentences for quick lookup
   const originalMap = new Map();
   originalSentences.forEach((sent, idx) => {
     const cleaned = stripHTML(sent);
-    originalMap.set(cleaned, { html: sent, index: idx, used: false });
+    if (cleaned) {
+      originalMap.set(cleaned, { html: sent, index: idx, used: false });
+    }
   });
   
   updatedSentences.forEach((updatedSent) => {
@@ -65,14 +66,12 @@ const createDiffHTML = (originalHTML, updatedHTML) => {
     const match = originalMap.get(cleanedUpdated);
     
     if (match && !match.used) {
-      // No change - show as is
       diffHTML += updatedSent;
       match.used = true;
     } else {
-      // Changed or new - highlight in yellow
       const highlighted = updatedSent.replace(
         /^(<[^>]+>)/,
-        `$1<span style="background-color: #fef3c7; padding: 2px 4px; border-left: 3px solid #f59e0b;">`
+        `$1<span style="background-color: #fef3c7; padding: 2px 4px; border-left: 3px solid #f59e0b; display: inline-block; width: 100%;">`
       ).replace(/(<\/[^>]+>)$/, `</span>$1`);
       diffHTML += highlighted;
       changesCount++;
@@ -91,10 +90,9 @@ export default function ContentOps() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
-  const [viewMode, setViewMode] = useState('diff'); // 'diff', 'original', 'updated'
+  const [viewMode, setViewMode] = useState('diff');
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
-  const [changeLocations, setChangeLocations] = useState([]);
   const [diffData, setDiffData] = useState(null);
 
   useEffect(() => {
@@ -136,75 +134,13 @@ export default function ContentOps() {
     }
   };
 
-  const findChanges = (originalContent, updatedContent) => {
-    const changes = [];
-    const headingRegex = /<h([1-6])[^>]*>(.*?)<\/h\1>/gi;
-    const headings = [...updatedContent.matchAll(headingRegex)];
-    
-    if (headings.length === 0) {
-      return [{ heading: 'Content body', changeCount: 1, description: 'Content has been updated with fact-checks and rewrites' }];
-    }
-    
-    for (let i = 0; i < headings.length; i++) {
-      const currentHeading = headings[i][2].replace(/<[^>]*>/g, '').trim();
-      const nextHeadingIndex = headings[i + 1] ? updatedContent.indexOf(headings[i + 1][0]) : updatedContent.length;
-      const currentHeadingIndex = updatedContent.indexOf(headings[i][0]);
-      
-      const updatedSection = updatedContent.substring(currentHeadingIndex, nextHeadingIndex);
-      
-      const originalHeadingRegex = new RegExp(`<h[1-6][^>]*>${currentHeading}<\/h[1-6]>`, 'i');
-      const originalHeadingMatch = originalContent.match(originalHeadingRegex);
-      
-      if (originalHeadingMatch) {
-        const originalHeadingIndex = originalContent.indexOf(originalHeadingMatch[0]);
-        let originalNextIndex = originalContent.length;
-        for (let j = i + 1; j < headings.length; j++) {
-          const searchHeading = headings[j][2].replace(/<[^>]*>/g, '').trim();
-          const searchRegex = new RegExp(`<h[1-6][^>]*>${searchHeading}<\/h[1-6]>`, 'i');
-          const match = originalContent.match(searchRegex);
-          if (match) {
-            originalNextIndex = originalContent.indexOf(match[0]);
-            break;
-          }
-        }
-        
-        const originalSection = originalContent.substring(originalHeadingIndex, originalNextIndex);
-        
-        const cleanOriginal = originalSection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        const cleanUpdated = updatedSection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        
-        if (cleanOriginal !== cleanUpdated) {
-          const originalParas = originalSection.match(/<p[^>]*>.*?<\/p>/gi) || [];
-          const updatedParas = updatedSection.match(/<p[^>]*>.*?<\/p>/gi) || [];
-          const changeCount = Math.abs(updatedParas.length - originalParas.length) + 
-                            Math.min(originalParas.length, updatedParas.length);
-          
-          changes.push({
-            heading: currentHeading,
-            changeCount: Math.max(1, changeCount),
-            description: `${changeCount} paragraph${changeCount > 1 ? 's' : ''} updated`
-          });
-        }
-      } else {
-        const paraCount = (updatedSection.match(/<p[^>]*>/g) || []).length;
-        changes.push({
-          heading: currentHeading,
-          changeCount: paraCount,
-          description: 'New section added'
-        });
-      }
-    }
-    
-    return changes.length > 0 ? changes : [{ heading: 'No changes detected', changeCount: 0, description: 'Content appears identical' }];
-  };
-
   const analyzeBlog = async (blog) => {
     setSelectedBlog(blog);
     setLoading(true);
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
     
-    // Store the FULL original content from Webflow
     const fullOriginalContent = blog.fieldData['post-body'] || '';
+    const originalCharCount = fullOriginalContent.length;
     
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
@@ -219,34 +155,50 @@ export default function ContentOps() {
           writingPrompt: WRITING_PROMPT
         })
       });
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Analysis failed');
       }
+      
       const data = await response.json();
+      let updatedContent = data.content || fullOriginalContent;
       
-      // Use the FULL original content, not the truncated one from backend
-      const updatedContent = data.content || fullOriginalContent;
+      // Check if backend returned truncated content
+      const returnedCharCount = updatedContent.length;
+      const truncationThreshold = 0.7; // If returned content is less than 70% of original, it's likely truncated
       
-      // Create diff highlighting
+      if (returnedCharCount < originalCharCount * truncationThreshold) {
+        console.warn(`⚠️ Backend may have truncated content. Original: ${originalCharCount} chars, Returned: ${returnedCharCount} chars`);
+        setStatus({ 
+          type: 'error', 
+          message: `⚠️ Backend returned incomplete content (${Math.round(returnedCharCount/originalCharCount*100)}% of original). Using original content. Check backend token limits.` 
+        });
+        updatedContent = fullOriginalContent; // Fallback to original
+      }
+      
       const diff = createDiffHTML(fullOriginalContent, updatedContent);
       setDiffData(diff);
       
-      const locations = findChanges(fullOriginalContent, updatedContent);
       setResult({
         changes: data.changes || [],
         searchesUsed: data.searchesUsed || 0,
         claudeCalls: data.claudeCalls || 0,
         sectionsUpdated: data.sectionsUpdated || 0,
         content: updatedContent,
-        originalContent: fullOriginalContent, // Use full content
+        originalContent: fullOriginalContent,
         duration: data.duration || 0
       });
-      setChangeLocations(locations);
+      
       setEditedContent(updatedContent);
-      setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${(data.duration/1000).toFixed(1)}s, ${diff.changesCount} changes highlighted` });
+      setStatus({ 
+        type: returnedCharCount < originalCharCount * truncationThreshold ? 'error' : 'success', 
+        message: returnedCharCount < originalCharCount * truncationThreshold 
+          ? `⚠️ Content truncated by backend. Using original. ${data.searchesUsed} searches, ${(data.duration/1000).toFixed(1)}s`
+          : `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${diff.changesCount} changes, ${(data.duration/1000).toFixed(1)}s` 
+      });
       setView('review');
-      setViewMode('diff'); // Start with diff view
+      setViewMode('diff');
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
       console.error('Analysis error:', error);
@@ -424,7 +376,7 @@ export default function ContentOps() {
           <div className="max-w-5xl mx-auto space-y-6">
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-8 text-white">
               <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
-              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {diffData?.changesCount || 0} sections highlighted</p>
+              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {diffData?.changesCount || 0} changes highlighted</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -433,48 +385,13 @@ export default function ContentOps() {
                 <div className="text-white text-2xl font-bold">{result.searchesUsed}</div>
               </div>
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                <div className="text-purple-300 text-sm">✨ Changes Highlighted</div>
+                <div className="text-purple-300 text-sm">✨ Changes</div>
                 <div className="text-white text-2xl font-bold">{diffData?.changesCount || 0}</div>
               </div>
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
                 <div className="text-purple-300 text-sm">⚡ Speed</div>
                 <div className="text-white text-2xl font-bold">{(result.duration/1000).toFixed(1)}s</div>
               </div>
-            </div>
-
-            <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-white">📍 Sections Updated:</h3>
-                {changeLocations.length > 1 && (
-                  <span className="text-purple-300 text-sm">{changeLocations.length} section{changeLocations.length > 1 ? 's' : ''} modified</span>
-                )}
-              </div>
-              {changeLocations.length > 0 && changeLocations[0].heading !== 'No changes detected' ? (
-                <div className="space-y-3">
-                  {changeLocations.map((change, i) => (
-                    <div key={i} className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10 hover:bg-opacity-10 transition-all">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-yellow-400 text-lg">📝</span>
-                            <h4 className="text-white font-semibold text-base">{change.heading}</h4>
-                          </div>
-                          <p className="text-purple-200 text-sm">{change.description}</p>
-                        </div>
-                        {change.changeCount > 0 && (
-                          <div className="ml-4 px-3 py-1 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-full">
-                            <span className="text-yellow-200 text-xs font-bold">{change.changeCount} change{change.changeCount > 1 ? 's' : ''}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
-                  <p className="text-purple-300">No structural changes detected - content appears identical or only minor formatting updates.</p>
-                </div>
-              )}
             </div>
 
             <div className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
@@ -529,7 +446,7 @@ export default function ContentOps() {
                     placeholder="Edit HTML content here..."
                   />
                   <div className="mt-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
-                    <p className="text-purple-200 text-sm">✏️ Editing mode: You can modify the HTML directly. Click "Preview" to see changes.</p>
+                    <p className="text-purple-200 text-sm">✏️ Editing mode: Modify HTML directly. Click "Preview" to see changes.</p>
                   </div>
                 </div>
               ) : (
@@ -562,7 +479,9 @@ export default function ContentOps() {
                         <p className="text-green-200 text-sm">✅ UPDATED content (no highlighting)</p>
                       </div>
                     )}
-                    <div className="text-purple-300 text-sm">{Math.round(editedContent.length / 1000)}K chars • Full content preserved</div>
+                    <div className="text-purple-300 text-sm">
+                      {Math.round(editedContent.length / 1000)}K chars • {Math.round(result.originalContent.length / 1000)}K original
+                    </div>
                   </div>
                 </>
               )}
