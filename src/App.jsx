@@ -24,6 +24,13 @@ const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accu
 NEVER USE: Em-dashes, banned words (transform, delve, unleash, revolutionize, meticulous, navigating, realm, bespoke, tailored, autopilot, magic), sentences over 30 words
 ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct address, bold for key points
 
+**CRITICAL: PRESERVE ALL IMAGES AND MEDIA**
+- Keep ALL <figure> tags with their exact styling and classes
+- Keep ALL <img> tags with their src URLs unchanged
+- Keep ALL <div> wrappers around images
+- Do NOT remove, modify, or relocate any images
+- Images should stay in their original positions in the content
+
 **SALESROBOT SPECIFIC UPDATES - MUST APPLY:**
 1. User count: Always use "4200+" users (not 4000, 3000, etc.)
 2. LinkedIn limits: "75 connection requests per day" (not 100/week, not other numbers)
@@ -36,12 +43,12 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 1. Fix factual errors found by research: Update pricing accurately, correct feature descriptions, fix stats
 2. Add missing AI features (HIGH PRIORITY): AI Voice Clone, AI Appointment Setter, SalesGPT, Smart Reply Detection, AI Comment Automation
 3. Fix grammar: Remove em-dashes, eliminate banned words, shorten 30+ word sentences, add contractions, use active voice
-4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links
+4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links, preserve ALL <figure> and <img> tags
 5. Add TL;DR if missing at the very start: 3-4 sentences covering main points
 
-**CRITICAL: Return the COMPLETE HTML content. Do not truncate or summarize. Return every single paragraph, heading, and section from the original with your edits applied.**
+**CRITICAL: Return the COMPLETE HTML content including ALL images. Do not truncate or summarize. Return every single paragraph, heading, image, and section from the original with your edits applied.**
 
-Return only the complete rewritten HTML content.`;
+Return only the complete rewritten HTML content with all images preserved.`;
 
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
@@ -106,6 +113,31 @@ function VisualEditor({ content, onChange }) {
     if (!editorRef.current || quillRef.current) return;
 
     const Quill = window.Quill;
+    
+    // Register image formats to preserve src and alt attributes
+    const BlockEmbed = Quill.import('blots/block/embed');
+    class ImageBlot extends BlockEmbed {
+      static create(value) {
+        let node = super.create();
+        node.setAttribute('src', value.src || value);
+        if (value.alt) {
+          node.setAttribute('alt', value.alt);
+        }
+        node.setAttribute('style', 'max-width: 100%; height: auto;');
+        return node;
+      }
+
+      static value(node) {
+        return {
+          src: node.getAttribute('src'),
+          alt: node.getAttribute('alt')
+        };
+      }
+    }
+    ImageBlot.blotName = 'image';
+    ImageBlot.tagName = 'img';
+    Quill.register(ImageBlot);
+
     quillRef.current = new Quill(editorRef.current, {
       theme: 'snow',
       modules: {
@@ -119,7 +151,9 @@ function VisualEditor({ content, onChange }) {
       }
     });
 
-    quillRef.current.root.innerHTML = content;
+    // Set initial content
+    const delta = quillRef.current.clipboard.convert(content);
+    quillRef.current.setContents(delta, 'silent');
 
     quillRef.current.on('text-change', () => {
       const html = quillRef.current.root.innerHTML;
@@ -130,15 +164,28 @@ function VisualEditor({ content, onChange }) {
   useEffect(() => {
     if (quillRef.current && content !== quillRef.current.root.innerHTML) {
       const cursorPosition = quillRef.current.getSelection();
-      quillRef.current.root.innerHTML = content;
+      const delta = quillRef.current.clipboard.convert(content);
+      quillRef.current.setContents(delta, 'silent');
       if (cursorPosition) {
-        quillRef.current.setSelection(cursorPosition);
+        try {
+          quillRef.current.setSelection(cursorPosition);
+        } catch (e) {
+          // Ignore cursor position errors
+        }
       }
     }
   }, [content]);
 
   return (
     <div className="bg-white rounded-lg shadow-xl border border-gray-200">
+      <style>{`
+        .ql-editor img {
+          max-width: 100%;
+          height: auto;
+          display: block;
+          margin: 1rem 0;
+        }
+      `}</style>
       <div ref={editorRef} style={{ minHeight: '600px' }} />
     </div>
   );
@@ -210,8 +257,37 @@ export default function ContentOps() {
     setLoading(true);
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
     
+    // Debug: Log all available fields to find images
+    console.log('📊 Blog fieldData keys:', Object.keys(blog.fieldData));
+    console.log('📊 Full blog object:', blog);
+    
     const fullOriginalContent = blog.fieldData['post-body'] || '';
     const originalCharCount = fullOriginalContent.length;
+    
+    // Count images in original content
+    const originalImageCount = (fullOriginalContent.match(/<img/g) || []).length;
+    const originalFigureCount = (fullOriginalContent.match(/<figure/g) || []).length;
+    
+    console.log('📝 Post body length:', originalCharCount);
+    console.log('🖼️ Original images found:', originalImageCount);
+    console.log('🖼️ Original figures found:', originalFigureCount);
+    console.log('🖼️ Looking for image fields...');
+    Object.keys(blog.fieldData).forEach(key => {
+      if (key.toLowerCase().includes('image') || key.toLowerCase().includes('photo') || key.toLowerCase().includes('picture')) {
+        console.log(`   Found potential image field: ${key}`, blog.fieldData[key]);
+      }
+    });
+    
+    if (originalImageCount > 0) {
+      console.log('✅ Images detected in original content!');
+      // Log first image src for verification
+      const imgMatch = fullOriginalContent.match(/<img[^>]+src="([^"]+)"/);
+      if (imgMatch) {
+        console.log('   First image URL:', imgMatch[1]);
+      }
+    } else {
+      console.warn('⚠️ No images found in post-body field!');
+    }
     
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
@@ -237,6 +313,24 @@ export default function ContentOps() {
       
       const returnedCharCount = updatedContent.length;
       const truncationThreshold = 0.7;
+      
+      // Check if images survived the backend processing
+      const returnedImageCount = (updatedContent.match(/<img/g) || []).length;
+      const returnedFigureCount = (updatedContent.match(/<figure/g) || []).length;
+      
+      console.log('🔍 Backend response check:');
+      console.log('   Original images:', originalImageCount, '| Returned images:', returnedImageCount);
+      console.log('   Original figures:', originalFigureCount, '| Returned figures:', returnedFigureCount);
+      console.log('   Original chars:', originalCharCount, '| Returned chars:', returnedCharCount);
+      
+      if (returnedImageCount < originalImageCount) {
+        console.error(`❌ IMAGE LOSS! Backend lost ${originalImageCount - returnedImageCount} images!`);
+        setStatus({ 
+          type: 'error', 
+          message: `⚠️ Backend lost ${originalImageCount - returnedImageCount} images. Using original content.` 
+        });
+        updatedContent = fullOriginalContent;
+      }
       
       if (returnedCharCount < originalCharCount * truncationThreshold) {
         console.warn(`⚠️ Backend may have truncated content. Original: ${originalCharCount} chars, Returned: ${returnedCharCount} chars`);
@@ -419,6 +513,24 @@ export default function ContentOps() {
                   <div key={blog.id} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-all group">
                     <h3 className="font-semibold text-[#0f172a] mb-2 line-clamp-2">{blog.fieldData.name}</h3>
                     <p className="text-sm text-gray-600 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
+                    
+                    {/* Debug: Show available fields */}
+                    <details className="mb-3 text-xs">
+                      <summary className="cursor-pointer text-gray-500 hover:text-gray-700">🔍 Debug: View fields</summary>
+                      <div className="mt-2 p-2 bg-gray-50 rounded text-gray-700 max-h-32 overflow-y-auto">
+                        {Object.keys(blog.fieldData).map(key => (
+                          <div key={key} className="flex gap-2">
+                            <span className="font-mono font-semibold">{key}:</span>
+                            <span className="truncate" title={String(blog.fieldData[key])}>
+                              {typeof blog.fieldData[key] === 'string' 
+                                ? blog.fieldData[key].substring(0, 50) + (blog.fieldData[key].length > 50 ? '...' : '')
+                                : JSON.stringify(blog.fieldData[key])}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                    
                     <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-[#0ea5e9] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7] disabled:opacity-50 shadow-sm">
                       {loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : '⚡ Smart Check'}
                     </button>
@@ -456,6 +568,19 @@ export default function ContentOps() {
               <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                 <div className="text-gray-600 text-sm">⚡ Speed</div>
                 <div className="text-[#0f172a] text-2xl font-bold">{(result.duration/1000).toFixed(1)}s</div>
+              </div>
+            </div>
+            
+            {/* Image count indicator */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-700 font-semibold">🖼️ Images:</span>
+                <span className="text-blue-900">
+                  {(editedContent.match(/<img/g) || []).length} images found in content
+                </span>
+                {(editedContent.match(/<img/g) || []).length === 0 && (
+                  <span className="text-orange-600 ml-2">⚠️ No images detected</span>
+                )}
               </div>
             </div>
 
@@ -521,7 +646,7 @@ export default function ContentOps() {
                   ) : (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly • Live preview shows images and formatting</p>
+                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly • Live preview shows images and formatting • Scroll down in the code editor to see all content including images</p>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {/* HTML Code Editor */}
@@ -532,7 +657,7 @@ export default function ContentOps() {
                           <textarea
                             value={editedContent}
                             onChange={(e) => setEditedContent(e.target.value)}
-                            className="w-full h-[600px] bg-gray-900 text-gray-100 font-mono text-sm p-4 focus:outline-none resize-none"
+                            className="w-full h-[800px] bg-gray-900 text-gray-100 font-mono text-sm p-4 focus:outline-none resize-none"
                             placeholder="Edit HTML content here..."
                             spellCheck="false"
                           />
@@ -553,6 +678,17 @@ export default function ContentOps() {
                             }
                             .html-preview figure {
                               margin: 1rem 0;
+                              max-width: 100% !important;
+                            }
+                            .html-preview figure > div {
+                              width: 100%;
+                            }
+                            .html-preview figure img {
+                              width: 100%;
+                              height: auto;
+                            }
+                            .html-preview .w-richtext-figure-type-image {
+                              max-width: 100% !important;
                             }
                             .html-preview p {
                               margin: 0.75rem 0;
@@ -575,7 +711,7 @@ export default function ContentOps() {
                             className="html-preview text-gray-800 overflow-y-auto p-4"
                             style={{ 
                               fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                              height: '600px',
+                              height: '800px',
                               lineHeight: '1.6'
                             }}
                             dangerouslySetInnerHTML={{ __html: editedContent }}
@@ -602,6 +738,17 @@ export default function ContentOps() {
                     }
                     .blog-content figure {
                       margin: 1rem 0;
+                      max-width: 100% !important;
+                    }
+                    .blog-content figure > div {
+                      width: 100%;
+                    }
+                    .blog-content figure img {
+                      width: 100%;
+                      height: auto;
+                    }
+                    .blog-content .w-richtext-figure-type-image {
+                      max-width: 100% !important;
                     }
                     .blog-content p {
                       margin: 0.75rem 0;
