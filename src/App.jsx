@@ -544,11 +544,39 @@ export default function ContentOps() {
                             <span className="text-gray-700 text-xs font-semibold uppercase tracking-wide">Live Preview</span>
                             <Eye className="w-4 h-4 text-gray-500" />
                           </div>
+                          <style>{`
+                            .html-preview img {
+                              max-width: 100%;
+                              height: auto;
+                              display: block;
+                              margin: 1rem 0;
+                            }
+                            .html-preview figure {
+                              margin: 1rem 0;
+                            }
+                            .html-preview p {
+                              margin: 0.75rem 0;
+                              line-height: 1.6;
+                            }
+                            .html-preview h1, .html-preview h2, .html-preview h3 {
+                              margin: 1.5rem 0 1rem 0;
+                              font-weight: 600;
+                            }
+                            .html-preview a {
+                              color: #0ea5e9;
+                              text-decoration: underline;
+                            }
+                            .html-preview ul, .html-preview ol {
+                              margin: 1rem 0;
+                              padding-left: 2rem;
+                            }
+                          `}</style>
                           <div 
-                            className="prose prose-sm max-w-none text-gray-800 overflow-y-auto p-4"
+                            className="html-preview text-gray-800 overflow-y-auto p-4"
                             style={{ 
                               fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                              height: '600px'
+                              height: '600px',
+                              lineHeight: '1.6'
                             }}
                             dangerouslySetInnerHTML={{ __html: editedContent }}
                           />
@@ -565,6 +593,34 @@ export default function ContentOps() {
                     <p className="text-blue-800 text-sm">✨ Full blog comparison • {highlightedData?.changesCount || 0} sections highlighted in blue</p>
                   </div>
                   
+                  <style>{`
+                    .blog-content img {
+                      max-width: 100%;
+                      height: auto;
+                      display: block;
+                      margin: 1rem 0;
+                    }
+                    .blog-content figure {
+                      margin: 1rem 0;
+                    }
+                    .blog-content p {
+                      margin: 0.75rem 0;
+                      line-height: 1.6;
+                    }
+                    .blog-content h1, .blog-content h2, .blog-content h3 {
+                      margin: 1.5rem 0 1rem 0;
+                      font-weight: 600;
+                    }
+                    .blog-content a {
+                      color: #0ea5e9;
+                      text-decoration: underline;
+                    }
+                    .blog-content ul, .blog-content ol {
+                      margin: 1rem 0;
+                      padding-left: 2rem;
+                    }
+                  `}</style>
+                  
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* BEFORE */}
                     <div className="bg-gray-50 rounded-xl p-6 border border-gray-300">
@@ -572,7 +628,7 @@ export default function ContentOps() {
                         ❌ BEFORE (Original)
                       </div>
                       <div 
-                        className="prose prose-sm max-w-none text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
+                        className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
                         style={{ 
                           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                           maxHeight: '800px'
@@ -587,7 +643,7 @@ export default function ContentOps() {
                         ✅ AFTER (Updated - Changes Highlighted)
                       </div>
                       <div 
-                        className="prose prose-sm max-w-none text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
+                        className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
                         style={{ 
                           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                           maxHeight: '800px'
