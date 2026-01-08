@@ -185,6 +185,27 @@ function VisualEditor({ content, onChange }) {
           display: block;
           margin: 1rem 0;
         }
+        .ql-editor h1 {
+          font-size: 2.25rem;
+          line-height: 2.5rem;
+          font-weight: 700;
+          margin: 2rem 0 1rem 0;
+          color: #0f172a;
+        }
+        .ql-editor h2 {
+          font-size: 1.875rem;
+          line-height: 2.25rem;
+          font-weight: 700;
+          margin: 1.75rem 0 1rem 0;
+          color: #0f172a;
+        }
+        .ql-editor h3 {
+          font-size: 1.5rem;
+          line-height: 2rem;
+          font-weight: 600;
+          margin: 1.5rem 0 0.75rem 0;
+          color: #1e293b;
+        }
       `}</style>
       <div ref={editorRef} style={{ minHeight: '600px' }} />
     </div>
@@ -694,9 +715,47 @@ export default function ContentOps() {
                               margin: 0.75rem 0;
                               line-height: 1.6;
                             }
-                            .html-preview h1, .html-preview h2, .html-preview h3 {
-                              margin: 1.5rem 0 1rem 0;
+                            .html-preview h1 {
+                              font-size: 2.25rem;
+                              line-height: 2.5rem;
+                              font-weight: 700;
+                              margin: 2rem 0 1rem 0;
+                              color: #0f172a;
+                            }
+                            .html-preview h2 {
+                              font-size: 1.875rem;
+                              line-height: 2.25rem;
+                              font-weight: 700;
+                              margin: 1.75rem 0 1rem 0;
+                              color: #0f172a;
+                            }
+                            .html-preview h3 {
+                              font-size: 1.5rem;
+                              line-height: 2rem;
                               font-weight: 600;
+                              margin: 1.5rem 0 0.75rem 0;
+                              color: #1e293b;
+                            }
+                            .html-preview h4 {
+                              font-size: 1.25rem;
+                              line-height: 1.75rem;
+                              font-weight: 600;
+                              margin: 1.25rem 0 0.5rem 0;
+                              color: #1e293b;
+                            }
+                            .html-preview h5 {
+                              font-size: 1.125rem;
+                              line-height: 1.5rem;
+                              font-weight: 600;
+                              margin: 1rem 0 0.5rem 0;
+                              color: #334155;
+                            }
+                            .html-preview h6 {
+                              font-size: 1rem;
+                              line-height: 1.5rem;
+                              font-weight: 600;
+                              margin: 1rem 0 0.5rem 0;
+                              color: #334155;
                             }
                             .html-preview a {
                               color: #0ea5e9;
@@ -754,9 +813,47 @@ export default function ContentOps() {
                       margin: 0.75rem 0;
                       line-height: 1.6;
                     }
-                    .blog-content h1, .blog-content h2, .blog-content h3 {
-                      margin: 1.5rem 0 1rem 0;
+                    .blog-content h1 {
+                      font-size: 2.25rem;
+                      line-height: 2.5rem;
+                      font-weight: 700;
+                      margin: 2rem 0 1rem 0;
+                      color: #0f172a;
+                    }
+                    .blog-content h2 {
+                      font-size: 1.875rem;
+                      line-height: 2.25rem;
+                      font-weight: 700;
+                      margin: 1.75rem 0 1rem 0;
+                      color: #0f172a;
+                    }
+                    .blog-content h3 {
+                      font-size: 1.5rem;
+                      line-height: 2rem;
                       font-weight: 600;
+                      margin: 1.5rem 0 0.75rem 0;
+                      color: #1e293b;
+                    }
+                    .blog-content h4 {
+                      font-size: 1.25rem;
+                      line-height: 1.75rem;
+                      font-weight: 600;
+                      margin: 1.25rem 0 0.5rem 0;
+                      color: #1e293b;
+                    }
+                    .blog-content h5 {
+                      font-size: 1.125rem;
+                      line-height: 1.5rem;
+                      font-weight: 600;
+                      margin: 1rem 0 0.5rem 0;
+                      color: #334155;
+                    }
+                    .blog-content h6 {
+                      font-size: 1rem;
+                      line-height: 1.5rem;
+                      font-weight: 600;
+                      margin: 1rem 0 0.5rem 0;
+                      color: #334155;
                     }
                     .blog-content a {
                       color: #0ea5e9;
