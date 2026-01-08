@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye } from 'lucide-react';
 
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
@@ -43,15 +43,16 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 
 Return only the complete rewritten HTML content.`;
 
-const extractChangedSections = (originalHTML, updatedHTML) => {
+// Create full HTML with highlights for changed sections
+const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  const originalBlocks = originalHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>|<div[^>]*>.*?<\/div>/gi) || [];
-  const updatedBlocks = updatedHTML.match(/<p[^>]*>.*?<\/p>|<h[1-6][^>]*>.*?<\/h[1-6]>|<li[^>]*>.*?<\/li>|<ul[^>]*>.*?<\/ul>|<ol[^>]*>.*?<\/ol>|<figure[^>]*>.*?<\/figure>|<div[^>]*>.*?<\/div>/gi) || [];
+  const blockRegex = /<(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote)[^>]*>.*?<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote)>|<img[^>]*\/?>/gis;
   
-  const changes = [];
+  const originalBlocks = originalHTML.match(blockRegex) || [];
+  const updatedBlocks = updatedHTML.match(blockRegex) || [];
+  
   const originalMap = new Map();
-  
   originalBlocks.forEach((block, idx) => {
     const cleaned = stripHTML(block);
     if (cleaned) {
@@ -59,29 +60,92 @@ const extractChangedSections = (originalHTML, updatedHTML) => {
     }
   });
   
+  let highlightedHTML = '';
   let changesCount = 0;
   
-  updatedBlocks.forEach((updatedBlock, idx) => {
+  updatedBlocks.forEach((updatedBlock) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
     
-    if (!match) {
-      let originalBlock = originalBlocks[idx] || originalBlocks[Math.min(idx, originalBlocks.length - 1)];
-      const cleanedOriginal = stripHTML(originalBlock);
-      if (cleanedOriginal !== cleanedUpdated) {
-        changes.push({
-          before: originalBlock,
-          after: updatedBlock,
-          index: idx,
-          type: 'modified'
-        });
-        changesCount++;
-      }
+    if (!match && cleanedUpdated.length > 10) {
+      // This block changed - wrap it with highlight
+      const highlighted = updatedBlock.replace(
+        /^(<[^>]+>)/,
+        `$1<span style="background-color: #fef3c7; display: block; padding: 8px; margin: -8px; border-left: 4px solid #f59e0b;">`
+      ).replace(/(<\/[^>]+>)$/, `</span>$1`);
+      highlightedHTML += highlighted;
+      changesCount++;
+    } else {
+      // No change - keep as is
+      highlightedHTML += updatedBlock;
     }
   });
   
-  return { changes, changesCount };
+  return { html: highlightedHTML, changesCount };
 };
+
+// Visual Editor Component
+function VisualEditor({ content, onChange }) {
+  const editorRef = useRef(null);
+  const quillRef = useRef(null);
+
+  useEffect(() => {
+    if (!window.Quill && !document.querySelector('script[src*="quill"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.quilljs.com/1.3.6/quill.js';
+      script.onload = () => initQuill();
+      document.body.appendChild(script);
+    } else if (window.Quill) {
+      initQuill();
+    }
+  }, []);
+
+  const initQuill = () => {
+    if (!editorRef.current || quillRef.current) return;
+
+    const Quill = window.Quill;
+    quillRef.current = new Quill(editorRef.current, {
+      theme: 'snow',
+      modules: {
+        toolbar: [
+          [{ 'header': [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+          ['link', 'image'],
+          ['clean']
+        ]
+      }
+    });
+
+    quillRef.current.root.innerHTML = content;
+
+    quillRef.current.on('text-change', () => {
+      const html = quillRef.current.root.innerHTML;
+      onChange(html);
+    });
+  };
+
+  useEffect(() => {
+    if (quillRef.current && content !== quillRef.current.root.innerHTML) {
+      const cursorPosition = quillRef.current.getSelection();
+      quillRef.current.root.innerHTML = content;
+      if (cursorPosition) {
+        quillRef.current.setSelection(cursorPosition);
+      }
+    }
+  }, [content]);
+
+  return (
+    <div className="bg-white rounded-lg shadow-2xl">
+      <div ref={editorRef} style={{ minHeight: '600px' }} />
+    </div>
+  );
+}
 
 export default function ContentOps() {
   const [view, setView] = useState('home');
@@ -93,9 +157,9 @@ export default function ContentOps() {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [result, setResult] = useState(null);
   const [viewMode, setViewMode] = useState('changes');
-  const [isEditing, setIsEditing] = useState(false);
+  const [editMode, setEditMode] = useState('visual');
   const [editedContent, setEditedContent] = useState('');
-  const [changedSections, setChangedSections] = useState(null);
+  const [highlightedData, setHighlightedData] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -178,8 +242,12 @@ export default function ContentOps() {
         updatedContent = fullOriginalContent;
       }
       
-      const sections = extractChangedSections(fullOriginalContent, updatedContent);
-      setChangedSections(sections);
+      console.log('🔗 Link check:');
+      console.log('Original links:', (fullOriginalContent.match(/<a /g) || []).length);
+      console.log('Updated links:', (updatedContent.match(/<a /g) || []).length);
+      
+      const highlighted = createHighlightedHTML(fullOriginalContent, updatedContent);
+      setHighlightedData(highlighted);
       
       setResult({
         changes: data.changes || [],
@@ -196,7 +264,7 @@ export default function ContentOps() {
         type: returnedCharCount < originalCharCount * truncationThreshold ? 'error' : 'success', 
         message: returnedCharCount < originalCharCount * truncationThreshold 
           ? `⚠️ Content truncated by backend. Using original. ${data.searchesUsed} searches, ${(data.duration/1000).toFixed(1)}s`
-          : `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${sections.changesCount} changes, ${(data.duration/1000).toFixed(1)}s` 
+          : `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${highlighted.changesCount} changes, ${(data.duration/1000).toFixed(1)}s` 
       });
       setView('review');
       setViewMode('changes');
@@ -265,8 +333,8 @@ export default function ContentOps() {
                 <span className="text-pink-300 text-sm font-semibold">Powered by Brave Search + Claude AI</span>
               </div>
               <h1 className="text-6xl font-bold text-white mb-4">Smart Content<br /><span className="bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">Fact-Checking</span></h1>
-              <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Side-by-side diff view</p>
-              <p className="text-sm text-purple-300">15-20 second checks • See only what changed</p>
+              <p className="text-xl text-purple-200 mb-3">Pure Brave research • AI-powered rewrites • Full blog diff view</p>
+              <p className="text-sm text-purple-300">15-20 second checks • Yellow highlights show changes</p>
             </div>
             <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-pink-600 hover:to-purple-700 shadow-2xl shadow-pink-500/50">
               {savedConfig ? 'Go to Dashboard →' : 'Get Started →'}
@@ -275,7 +343,7 @@ export default function ContentOps() {
               {[
                 { icon: <Search className="w-8 h-8" />, title: 'Pure Brave Research', desc: 'Stage 1: Direct Brave API searches (no Claude costs)' },
                 { icon: <Zap className="w-8 h-8" />, title: 'Smart Rewrites', desc: 'Stage 2: Claude fixes errors, adds features, improves grammar' },
-                { icon: <TrendingUp className="w-8 h-8" />, title: 'Side-by-Side Diff', desc: 'See ONLY changed sections: before vs after' }
+                { icon: <Eye className="w-8 h-8" />, title: 'Full Blog Diff', desc: 'See complete before/after with highlighted changes' }
               ].map((f, i) => (
                 <div key={i} className="bg-white bg-opacity-5 backdrop-blur-lg rounded-2xl p-6 border border-white border-opacity-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 mx-auto text-white shadow-lg shadow-pink-500/30">{f.icon}</div>
@@ -328,7 +396,7 @@ export default function ContentOps() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-white">Your Blog Posts</h2>
-                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite → Side-by-Side Diff</p>
+                <p className="text-purple-300 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite → Full Blog Diff</p>
               </div>
               <button onClick={fetchBlogs} disabled={loading} className="bg-white bg-opacity-10 text-pink-300 px-4 py-2 rounded-lg flex items-center gap-2 border border-white border-opacity-20 hover:bg-opacity-20">
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Refresh
@@ -367,7 +435,7 @@ export default function ContentOps() {
           <div className="max-w-7xl mx-auto space-y-6">
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-8 text-white">
               <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
-              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {changedSections?.changesCount || 0} sections changed</p>
+              <p className="text-green-100">{result.searchesUsed} Brave searches • {result.claudeCalls} Claude rewrite • {highlightedData?.changesCount || 0} changes highlighted</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -377,7 +445,7 @@ export default function ContentOps() {
               </div>
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
                 <div className="text-purple-300 text-sm">✨ Changes</div>
-                <div className="text-white text-2xl font-bold">{changedSections?.changesCount || 0}</div>
+                <div className="text-white text-2xl font-bold">{highlightedData?.changesCount || 0}</div>
               </div>
               <div className="bg-white bg-opacity-5 rounded-lg p-4 border border-white border-opacity-10">
                 <div className="text-purple-300 text-sm">⚡ Speed</div>
@@ -397,100 +465,106 @@ export default function ContentOps() {
                         : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
                     }`}
                   >
-                    ✨ Changes Only
+                    ✨ Before/After Diff
                   </button>
                   <button 
-                    onClick={() => setViewMode('full')} 
+                    onClick={() => setViewMode('edit')} 
                     className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      viewMode === 'full' 
-                        ? 'bg-green-500 bg-opacity-30 text-green-200 border border-green-500 border-opacity-40' 
+                      viewMode === 'edit' 
+                        ? 'bg-purple-500 bg-opacity-30 text-purple-200 border border-purple-500 border-opacity-40' 
                         : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20 hover:bg-opacity-20'
                     }`}
                   >
-                    📝 Full Content
-                  </button>
-                  <button 
-                    onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditedContent(result.content); }} 
-                    className="bg-purple-500 bg-opacity-20 hover:bg-opacity-30 text-purple-200 px-4 py-2 rounded-lg text-sm font-semibold border border-purple-500 border-opacity-30 transition-all"
-                  >
-                    {isEditing ? '👁️ Preview' : '✏️ Edit HTML'}
+                    ✏️ Edit Content
                   </button>
                 </div>
               </div>
 
-              {isEditing ? (
-                <div className="bg-gray-900 rounded-lg p-4 shadow-2xl">
-                  <textarea
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    className="w-full h-[700px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                    placeholder="Edit HTML content here..."
-                  />
-                  <div className="mt-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
-                    <p className="text-purple-200 text-sm">✏️ Editing mode: Modify HTML directly. Click "Preview" to see changes.</p>
+              {viewMode === 'edit' && (
+                <div className="space-y-4">
+                  <div className="flex gap-2 mb-4">
+                    <button 
+                      onClick={() => setEditMode('visual')}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${
+                        editMode === 'visual' 
+                          ? 'bg-blue-500 bg-opacity-30 text-blue-200 border border-blue-500' 
+                          : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20'
+                      }`}
+                    >
+                      <Eye className="w-4 h-4" /> Visual Editor
+                    </button>
+                    <button 
+                      onClick={() => setEditMode('html')}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${
+                        editMode === 'html' 
+                          ? 'bg-blue-500 bg-opacity-30 text-blue-200 border border-blue-500' 
+                          : 'bg-white bg-opacity-10 text-purple-300 border border-white border-opacity-20'
+                      }`}
+                    >
+                      <Code className="w-4 h-4" /> HTML Editor
+                    </button>
                   </div>
-                </div>
-              ) : viewMode === 'changes' ? (
-                <div className="space-y-6">
-                  {changedSections && changedSections.changes.length > 0 ? (
+
+                  {editMode === 'visual' ? (
                     <>
-                      <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
-                        <p className="text-yellow-200 text-sm">✨ Showing {changedSections.changesCount} changed sections • Side-by-side comparison</p>
+                      <div className="mb-3 px-4 py-2 bg-blue-500 bg-opacity-20 border border-blue-500 border-opacity-30 rounded-lg">
+                        <p className="text-blue-200 text-sm">✨ Visual mode: Type naturally, add links (🔗), insert images (🖼️), format text</p>
                       </div>
-                      {changedSections.changes.map((change, idx) => (
-                        <div key={idx} className="bg-white bg-opacity-5 rounded-xl p-6 border border-white border-opacity-10">
-                          <div className="mb-3 flex items-center gap-2">
-                            <span className="px-3 py-1 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-full text-yellow-200 text-xs font-bold">
-                              Change #{idx + 1}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div className="bg-red-500 bg-opacity-5 rounded-lg p-4 border border-red-500 border-opacity-20">
-                              <div className="text-red-300 text-xs font-bold mb-2 uppercase tracking-wide">❌ Before</div>
-                              <div 
-                                className="prose prose-sm max-w-none text-gray-300"
-                                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
-                                dangerouslySetInnerHTML={{ __html: change.before }}
-                              />
-                            </div>
-                            <div className="bg-green-500 bg-opacity-10 rounded-lg p-4 border border-green-500 border-opacity-30">
-                              <div className="text-green-300 text-xs font-bold mb-2 uppercase tracking-wide">✅ After</div>
-                              <div 
-                                className="prose prose-sm max-w-none text-white"
-                                style={{ 
-                                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                                  backgroundColor: '#fef3c7',
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  color: '#1f2937'
-                                }}
-                                dangerouslySetInnerHTML={{ __html: change.after }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                      <VisualEditor content={editedContent} onChange={setEditedContent} />
                     </>
                   ) : (
-                    <div className="bg-white bg-opacity-5 rounded-lg p-8 border border-white border-opacity-10 text-center">
-                      <p className="text-purple-300 text-lg">✨ No changes detected - content is already perfect!</p>
-                    </div>
+                    <>
+                      <div className="mb-3 px-4 py-2 bg-purple-500 bg-opacity-20 border border-purple-500 border-opacity-30 rounded-lg">
+                        <p className="text-purple-200 text-sm">✏️ HTML mode: Edit raw HTML directly</p>
+                      </div>
+                      <textarea
+                        value={editedContent}
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="w-full h-[600px] bg-gray-800 text-gray-100 font-mono text-sm p-4 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                        placeholder="Edit HTML content here..."
+                      />
+                    </>
                   )}
                 </div>
-              ) : (
-                <div 
-                  className="bg-white rounded-lg p-8 shadow-2xl overflow-y-auto" 
-                  style={{ maxHeight: '800px' }}
-                >
-                  <div 
-                    className="prose prose-lg max-w-none text-gray-800" 
-                    style={{ 
-                      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', 
-                      lineHeight: '1.7',
-                      fontSize: '16px'
-                    }} 
-                    dangerouslySetInnerHTML={{ __html: editedContent }} 
-                  />
+              )}
+
+              {viewMode === 'changes' && (
+                <div className="space-y-6">
+                  <div className="px-4 py-2 bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 rounded-lg">
+                    <p className="text-yellow-200 text-sm">✨ Full blog comparison • {highlightedData?.changesCount || 0} sections highlighted in yellow</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* BEFORE - Full Original Blog */}
+                    <div className="bg-red-500 bg-opacity-5 rounded-xl p-6 border border-red-500 border-opacity-20">
+                      <div className="text-red-300 text-sm font-bold mb-4 uppercase tracking-wide sticky top-0 bg-opacity-90 backdrop-blur-sm py-2">
+                        ❌ BEFORE (Original)
+                      </div>
+                      <div 
+                        className="prose prose-sm max-w-none text-gray-300 overflow-y-auto"
+                        style={{ 
+                          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                          maxHeight: '800px'
+                        }}
+                        dangerouslySetInnerHTML={{ __html: result.originalContent }}
+                      />
+                    </div>
+
+                    {/* AFTER - Full Updated Blog with Highlights */}
+                    <div className="bg-green-500 bg-opacity-5 rounded-xl p-6 border border-green-500 border-opacity-30">
+                      <div className="text-green-300 text-sm font-bold mb-4 uppercase tracking-wide sticky top-0 bg-opacity-90 backdrop-blur-sm py-2">
+                        ✅ AFTER (Updated - Changes Highlighted)
+                      </div>
+                      <div 
+                        className="prose prose-sm max-w-none text-gray-100 overflow-y-auto"
+                        style={{ 
+                          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                          maxHeight: '800px'
+                        }}
+                        dangerouslySetInnerHTML={{ __html: highlightedData?.html || editedContent }}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -526,7 +600,7 @@ export default function ContentOps() {
       <footer className="bg-black bg-opacity-30 border-t border-white border-opacity-10 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-200 text-sm">
           <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing → Side-by-Side Diff</p>
+          <p className="mt-2 text-purple-300">ContentOps • Brave Research → Claude Writing → Full Blog Diff</p>
         </div>
       </footer>
     </div>
