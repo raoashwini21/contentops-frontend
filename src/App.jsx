@@ -167,6 +167,14 @@ export default function ContentOps() {
     }
   }, []);
 
+  // Update highlighted diff whenever edited content changes
+  useEffect(() => {
+    if (result && editedContent && result.originalContent) {
+      const highlighted = createHighlightedHTML(result.originalContent, editedContent);
+      setHighlightedData(highlighted);
+    }
+  }, [editedContent, result]);
+
   const saveConfig = () => {
     if (!config.anthropicKey || !config.braveKey || !config.webflowKey || !config.collectionId) {
       setStatus({ type: 'error', message: 'Please fill in all fields' });
@@ -513,14 +521,39 @@ export default function ContentOps() {
                   ) : (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly</p>
+                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly • Live preview shows images and formatting</p>
                       </div>
-                      <textarea
-                        value={editedContent}
-                        onChange={(e) => setEditedContent(e.target.value)}
-                        className="w-full h-[600px] bg-gray-900 text-gray-100 font-mono text-sm p-4 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
-                        placeholder="Edit HTML content here..."
-                      />
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* HTML Code Editor */}
+                        <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+                          <div className="bg-gray-800 px-4 py-2 border-b border-gray-700">
+                            <span className="text-gray-300 text-xs font-semibold uppercase tracking-wide">HTML Source</span>
+                          </div>
+                          <textarea
+                            value={editedContent}
+                            onChange={(e) => setEditedContent(e.target.value)}
+                            className="w-full h-[600px] bg-gray-900 text-gray-100 font-mono text-sm p-4 focus:outline-none resize-none"
+                            placeholder="Edit HTML content here..."
+                            spellCheck="false"
+                          />
+                        </div>
+
+                        {/* Live Preview */}
+                        <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                          <div className="bg-gray-100 px-4 py-2 border-b border-gray-300 flex items-center justify-between">
+                            <span className="text-gray-700 text-xs font-semibold uppercase tracking-wide">Live Preview</span>
+                            <Eye className="w-4 h-4 text-gray-500" />
+                          </div>
+                          <div 
+                            className="prose prose-sm max-w-none text-gray-800 overflow-y-auto p-4"
+                            style={{ 
+                              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                              height: '600px'
+                            }}
+                            dangerouslySetInnerHTML={{ __html: editedContent }}
+                          />
+                        </div>
+                      </div>
                     </>
                   )}
                 </div>
