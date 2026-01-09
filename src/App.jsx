@@ -29,16 +29,23 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 - Use <em>text</em> or <i>text</i> for italics (NEVER use *text* or _text_)
 - All formatting must be valid HTML, no markdown
 
-**CRITICAL: PRESERVE ALL SPECIAL ELEMENTS**
+**CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
 - Keep ALL <figure> tags with their exact styling and classes
 - Keep ALL <img> tags with their src URLs unchanged
 - Keep ALL <div> wrappers around images
 - Keep ALL <table>, <thead>, <tbody>, <tr>, <td>, <th> tags with all attributes and classes
+- NEVER convert tables to plain text lists or descriptions - keep the exact HTML table structure
 - Keep ALL <iframe>, <script>, <embed> tags (widgets, embeds, calculators, forms)
 - Keep ALL custom Webflow elements (w-richtext-, w-embed-, w-widget-, etc.)
 - Keep ALL data attributes (data-*, w-*, webflow-*)
-- Do NOT remove, modify, or relocate any images, tables, widgets, or embeds
+- Do NOT remove, modify, simplify, or relocate any images, tables, widgets, or embeds
 - All special elements should stay in their original positions in the content
+
+**EXAMPLES OF WHAT NOT TO DO:**
+❌ BAD: Converting <table><tr><td>Feature</td><td>Price</td></tr></table> to "Feature: Price"
+❌ BAD: Converting comparison tables to bullet point lists
+❌ BAD: Describing table contents instead of preserving the HTML
+✅ GOOD: Keep the exact <table> HTML structure with all rows and columns
 
 **SALESROBOT SPECIFIC UPDATES - MUST APPLY:**
 1. User count: Always use "4200+" users (not 4000, 3000, etc.)
@@ -55,14 +62,15 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links/tables/widgets, preserve ALL <figure>, <img>, <table>, <iframe>, <script>, and <embed> tags with all their attributes
 5. Add TL;DR if missing at the very start: 3-4 sentences covering main points
 
-**CRITICAL: Return the COMPLETE HTML content including ALL images, tables, widgets, and embeds. Do not truncate or summarize. Return every single paragraph, heading, image, table, widget, and section from the original with your edits applied. Use only HTML tags, never markdown syntax.**
+**CRITICAL: Return the COMPLETE HTML content including ALL images, tables (as HTML tables, not text), widgets, and embeds. Do not truncate, simplify, or summarize. Return every single paragraph, heading, image, table row, widget, and section from the original with your edits applied. Use only HTML tags, never markdown syntax. Never convert structured HTML elements like tables into plain text descriptions.**
 
-Return only the complete rewritten HTML content with all images, tables, and widgets preserved.`;
+Return only the complete rewritten HTML content with all images, tables, and widgets preserved exactly as HTML.`;
 
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  const blockRegex = /<(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote)[^>]*>.*?<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote)>|<img[^>]*\/?>/gis;
+  // Split by major blocks and preserve structure
+  const blockRegex = /<(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)[^>]*>.*?<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)>|<img[^>]*\/?>/gis;
   
   const originalBlocks = originalHTML.match(blockRegex) || [];
   const updatedBlocks = updatedHTML.match(blockRegex) || [];
@@ -82,7 +90,13 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
     
-    if (!match && cleanedUpdated.length > 10) {
+    // Only highlight if:
+    // 1. Block is substantial (more than 20 chars of text)
+    // 2. Block doesn't exist in original
+    // 3. Block is not a table, widget, or image (preserve those without highlighting)
+    const isSpecialElement = updatedBlock.match(/<(table|iframe|embed|script|img|figure)/i);
+    
+    if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
       // Changed section - subtle blue highlight
       const highlighted = updatedBlock.replace(
         /^(<[^>]+>)/,
@@ -406,6 +420,17 @@ export default function ContentOps() {
       // Fix markdown-style bold to HTML bold tags
       updatedContent = updatedContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       
+      // Check if content has been converted to plain text (common issue)
+      const hasHTMLTags = updatedContent.match(/<[a-z][\s\S]*>/i);
+      if (!hasHTMLTags && fullOriginalContent.match(/<[a-z][\s\S]*>/i)) {
+        console.error('❌ CRITICAL: Backend converted HTML to plain text!');
+        setStatus({ 
+          type: 'error', 
+          message: '⚠️ Backend stripped all HTML tags. Using original content.' 
+        });
+        updatedContent = fullOriginalContent;
+      }
+      
       const returnedCharCount = updatedContent.length;
       const truncationThreshold = 0.7;
       
@@ -697,18 +722,23 @@ export default function ContentOps() {
               </div>
             </div>
             
-            {/* Image count indicator */}
+            {/* Element detection and warnings */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="text-blue-700 font-semibold mb-2">📊 Content Elements Detected:</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-blue-700">🖼️ Images:</span>
                   <span className="text-blue-900 font-semibold">{(editedContent.match(/<img/g) || []).length}</span>
-                  {(editedContent.match(/<img/g) || []).length === 0 && <span className="text-orange-600">⚠️</span>}
+                  {(editedContent.match(/<img/g) || []).length === 0 && (
+                    <span className="text-orange-600" title="No images detected">⚠️</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-blue-700">📊 Tables:</span>
                   <span className="text-blue-900 font-semibold">{(editedContent.match(/<table/g) || []).length}</span>
+                  {(editedContent.match(/<table/g) || []).length === 0 && result.originalContent.match(/<table/g) && (
+                    <span className="text-red-600" title="Tables were lost!">❌</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-blue-700">🎬 Embeds:</span>
@@ -725,6 +755,20 @@ export default function ContentOps() {
                 </div>
               </div>
               <p className="text-xs text-blue-600 mt-2">✅ All elements preserved with original attributes and styling</p>
+              
+              {/* Warning if elements were lost */}
+              {((editedContent.match(/<table/g) || []).length < (result.originalContent.match(/<table/g) || []).length) && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800 text-sm font-semibold">⚠️ Warning: Tables were lost during processing!</p>
+                  <p className="text-red-700 text-xs mt-1">Backend converted tables to text. Click below to restore original content.</p>
+                  <button
+                    onClick={() => setEditedContent(result.originalContent)}
+                    className="mt-2 px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700"
+                  >
+                    🔄 Restore Original Content with Tables
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-lg">
