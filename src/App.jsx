@@ -324,9 +324,10 @@ export default function ContentOps() {
   const [editedContent, setEditedContent] = useState('');
   const [highlightedData, setHighlightedData] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
-  const [showHighlights, setShowHighlights] = useState(false); // Start with highlights OFF to avoid widget confusion
+  const [showHighlights, setShowHighlights] = useState(true); // Show highlights by default
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
+  const isUserEditingRef = useRef(false); // Flag to prevent sync conflicts
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -346,6 +347,7 @@ export default function ContentOps() {
   useEffect(() => {
     if (result && editedContent && result.originalContent) {
       const highlighted = createHighlightedHTML(result.originalContent, editedContent);
+      console.log('🎨 Highlighting created:', highlighted.changesCount, 'changes found');
       setHighlightedData(highlighted);
     }
   }, [editedContent, result]);
@@ -359,9 +361,41 @@ export default function ContentOps() {
 
   // Sync content to After view when highlights toggle or content changes
   useEffect(() => {
+    // Don't sync if user is actively editing - prevents conflicts
+    if (isUserEditingRef.current) {
+      console.log('⏸️ Skipping sync - user is editing');
+      isUserEditingRef.current = false;
+      return;
+    }
+    
     if (afterViewRef.current && viewMode === 'changes') {
       const contentToShow = showHighlights ? (highlightedData?.html || editedContent) : editedContent;
-      afterViewRef.current.innerHTML = contentToShow;
+      
+      // Only update if content actually changed to avoid cursor jumps
+      if (afterViewRef.current.innerHTML !== contentToShow) {
+        console.log('🔄 Syncing content to view');
+        
+        // Save cursor position before update
+        const selection = window.getSelection();
+        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        const startOffset = range?.startOffset;
+        const startContainer = range?.startContainer;
+        
+        afterViewRef.current.innerHTML = contentToShow;
+        
+        // Try to restore cursor position
+        if (startContainer && startOffset !== undefined) {
+          try {
+            const newRange = document.createRange();
+            newRange.setStart(startContainer, Math.min(startOffset, startContainer.textContent?.length || 0));
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+          } catch (e) {
+            // Cursor restoration failed, that's okay
+          }
+        }
+      }
     }
   }, [editedContent, viewMode, showHighlights, highlightedData]);
 
@@ -373,11 +407,26 @@ export default function ContentOps() {
 
   const handleAfterViewInput = () => {
     if (afterViewRef.current) {
-      // Get the raw HTML without highlight wrappers
+      // Mark that user is editing to prevent sync conflicts
+      isUserEditingRef.current = true;
+      
+      // Get the raw HTML
       const rawHTML = afterViewRef.current.innerHTML;
-      // Remove highlight divs but keep the content
-      const cleanedHTML = rawHTML.replace(/<div style="background-color: #e0f2fe;[^"]*">(.*?)<\/div>/gs, '$1');
+      
+      // Only remove highlight wrapper divs, preserve all other HTML
+      // Use a more specific regex that only targets our highlight divs
+      const cleanedHTML = rawHTML.replace(
+        /<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">(.*?)<\/div>/gs, 
+        '$1'
+      );
+      
+      console.log('💾 Content updated by user');
       setEditedContent(cleanedHTML);
+      
+      // Reset the flag after a short delay
+      setTimeout(() => {
+        isUserEditingRef.current = false;
+      }, 100);
     }
   };
 
@@ -400,14 +449,48 @@ export default function ContentOps() {
 
   // Format text (bold, italic)
   const formatText = (command) => {
-    document.execCommand(command, false, null);
+    // Focus first to ensure selection is in the contentEditable div
     afterViewRef.current?.focus();
+    
+    // Mark as user editing
+    isUserEditingRef.current = true;
+    
+    // Apply the format
+    const success = document.execCommand(command, false, null);
+    console.log(`✏️ Applied ${command} formatting:`, success ? 'success' : 'failed');
+    
+    // Force update after a short delay to ensure DOM has updated
+    setTimeout(() => {
+      if (afterViewRef.current) {
+        const currentHTML = afterViewRef.current.innerHTML;
+        console.log('💾 Saving formatted content');
+        setEditedContent(currentHTML);
+      }
+      isUserEditingRef.current = false;
+    }, 50);
   };
 
   // Format as heading
   const formatHeading = (level) => {
-    document.execCommand('formatBlock', false, `<h${level}>`);
+    // Focus first
     afterViewRef.current?.focus();
+    
+    // Mark as user editing
+    isUserEditingRef.current = true;
+    
+    // Apply the heading format
+    const success = document.execCommand('formatBlock', false, `<h${level}>`);
+    console.log(`✏️ Applied H${level} heading:`, success ? 'success' : 'failed');
+    
+    // Force update after a short delay
+    setTimeout(() => {
+      if (afterViewRef.current) {
+        const currentHTML = afterViewRef.current.innerHTML;
+        console.log('💾 Saving heading content');
+        setEditedContent(currentHTML);
+      }
+      isUserEditingRef.current = false;
+    }, 50);
   };
 
   // Insert link
@@ -418,10 +501,18 @@ export default function ContentOps() {
 
   const applyLink = () => {
     if (!linkUrl) return;
+    
+    // Mark as user editing
+    isUserEditingRef.current = true;
+    
+    // Restore the saved selection
     restoreSelection();
+    
     const selection = window.getSelection();
     if (selection.toString()) {
-      document.execCommand('createLink', false, linkUrl);
+      // Text is selected, create link
+      const success = document.execCommand('createLink', false, linkUrl);
+      console.log('🔗 Link created:', success ? 'success' : 'failed', linkUrl);
     } else {
       // No text selected, insert link with URL as text
       const link = document.createElement('a');
@@ -433,11 +524,26 @@ export default function ContentOps() {
       if (savedSelection) {
         savedSelection.insertNode(link);
         savedSelection.collapse(false);
+        console.log('🔗 Link inserted:', linkUrl);
       }
     }
+    
+    // Focus back on the editor
+    afterViewRef.current?.focus();
+    
+    // Force update after a short delay
+    setTimeout(() => {
+      if (afterViewRef.current) {
+        const currentHTML = afterViewRef.current.innerHTML;
+        console.log('💾 Saving linked content');
+        setEditedContent(currentHTML);
+      }
+      isUserEditingRef.current = false;
+    }, 50);
+    
+    // Close modal and reset
     setShowLinkModal(false);
     setLinkUrl('');
-    handleAfterViewInput();
   };
 
   // Insert image
@@ -447,6 +553,10 @@ export default function ContentOps() {
 
   const applyImage = () => {
     if (!imageUrl) return;
+    
+    // Mark as user editing
+    isUserEditingRef.current = true;
+    
     const img = document.createElement('img');
     img.src = imageUrl;
     img.style.maxWidth = '100%';
@@ -461,13 +571,24 @@ export default function ContentOps() {
       const range = selection.getRangeAt(0);
       range.insertNode(img);
       range.collapse(false);
+      console.log('🖼️ Image inserted:', imageUrl);
     } else {
       afterViewRef.current?.appendChild(img);
+      console.log('🖼️ Image appended:', imageUrl);
     }
+    
+    // Force update after a short delay
+    setTimeout(() => {
+      if (afterViewRef.current) {
+        const currentHTML = afterViewRef.current.innerHTML;
+        console.log('💾 Saving content with new image');
+        setEditedContent(currentHTML);
+      }
+      isUserEditingRef.current = false;
+    }, 50);
     
     setShowImageModal(false);
     setImageUrl('');
-    handleAfterViewInput();
   };
 
   const handleImageClick = (e) => {
@@ -488,6 +609,34 @@ export default function ContentOps() {
     if (images[imageAltModal.index]) {
       images[imageAltModal.index].setAttribute('alt', imageAltModal.currentAlt);
       setEditedContent(doc.body.innerHTML);
+    }
+    
+    setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
+  };
+
+  const deleteImage = () => {
+    if (!confirm('Are you sure you want to delete this image?')) {
+      return;
+    }
+    
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(editedContent, 'text/html');
+    const images = doc.querySelectorAll('img');
+    
+    if (images[imageAltModal.index]) {
+      // Remove the image element
+      const imageElement = images[imageAltModal.index];
+      
+      // Check if image is wrapped in a figure tag and remove the whole figure
+      const figure = imageElement.closest('figure');
+      if (figure) {
+        figure.remove();
+      } else {
+        imageElement.remove();
+      }
+      
+      setEditedContent(doc.body.innerHTML);
+      console.log('🗑️ Image deleted');
     }
     
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
@@ -1215,9 +1364,8 @@ export default function ContentOps() {
                     <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-1 mr-3">
                       <p className="text-blue-800 text-sm">
                         ✨ <span className="font-semibold">Edit content directly!</span> Use toolbar to format (B, I, H1-H3, Link, Image) • 
-                        <span className="font-semibold">Toggle highlights</span> to see AI changes
-                        {!showHighlights && <span className="text-green-600"> → Clean view active</span>}
-                        {showHighlights && <span className="text-blue-600"> → {highlightedData?.changesCount || 0} changes marked</span>}
+                        {showHighlights && <span className="text-blue-600"><span className="font-semibold">{highlightedData?.changesCount || 0} AI changes</span> highlighted in blue → Toggle off for clean view</span>}
+                        {!showHighlights && <span className="text-green-600">Clean view active → Toggle on to see AI changes</span>}
                       </p>
                     </div>
                     <button
@@ -1228,7 +1376,7 @@ export default function ContentOps() {
                           : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      {showHighlights ? '✨ Highlights ON' : '👁️ Show Changes'}
+                      {showHighlights ? '✨ Hide Changes' : '👁️ Show Changes'}
                     </button>
                   </div>
                   
@@ -1238,6 +1386,18 @@ export default function ContentOps() {
                       height: auto;
                       display: block;
                       margin: 1rem 0;
+                      cursor: pointer;
+                      transition: all 0.2s;
+                      border-radius: 4px;
+                    }
+                    .blog-content img:hover {
+                      outline: 3px solid #0ea5e9;
+                      outline-offset: 2px;
+                      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
+                    }
+                    .blog-content img:focus {
+                      outline: 3px solid #0ea5e9;
+                      outline-offset: 2px;
                     }
                     .blog-content figure {
                       margin: 1rem 0;
@@ -1485,6 +1645,17 @@ export default function ContentOps() {
                       onInput={handleAfterViewInput}
                       onBlur={handleAfterViewInput}
                       onClick={handleImageClick}
+                      onKeyDown={(e) => {
+                        // Allow deleting selected images with Delete or Backspace
+                        if (e.key === 'Delete' || e.key === 'Backspace') {
+                          const selection = window.getSelection();
+                          if (selection.anchorNode?.nodeName === 'IMG' || 
+                              selection.anchorNode?.querySelector?.('img')) {
+                            // Let the default behavior handle it
+                            setTimeout(() => handleAfterViewInput(), 10);
+                          }
+                        }
+                      }}
                       style={{ 
                         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                         maxHeight: '800px',
@@ -1553,6 +1724,13 @@ export default function ContentOps() {
                 className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
               >
                 Cancel
+              </button>
+              <button 
+                onClick={deleteImage}
+                className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 shadow-lg flex items-center justify-center gap-2"
+                title="Delete this image"
+              >
+                🗑️ Delete
               </button>
               <button 
                 onClick={updateImageAlt}
