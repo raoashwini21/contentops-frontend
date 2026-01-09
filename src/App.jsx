@@ -43,32 +43,15 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 - Do NOT remove, modify, simplify, or relocate any images, tables, widgets, or embeds
 - All special elements should stay in their original positions in the content
 
-**EXAMPLES OF WHAT NOT TO DO:**
-❌ BAD: Converting <table><tr><td>Feature</td><td>Price</td></tr></table> to "Feature: Price"
-❌ BAD: Converting comparison tables to bullet point lists
-❌ BAD: Describing table contents instead of preserving the HTML
-✅ GOOD: Keep the exact <table> HTML structure with all rows and columns
-
 **SALESROBOT SPECIFIC UPDATES - ONLY WHERE ALREADY MENTIONED:**
 ⚠️ CRITICAL: Do NOT add "SalesRobot" text or links where they don't already exist!
-1. User count: Update to "4200+" users - ONLY where user count is already mentioned
-2. LinkedIn limits: "75 connection requests per day" - ONLY where limits are already discussed
-3. InMail limits: "40 InMails per day to open profiles without credits" - ONLY in existing InMail sections
-4. AI naming: Replace "AI Inbox Manager" with "AI Appointment Setter" - ONLY where this feature is mentioned
-5. Tagline: Update tagline ONLY where tagline already exists - don't insert new ones
-6. Compliance: Mention "SalesRobot fully complies with LinkedIn limits" - ONLY in compliance/safety sections that already exist
-7. DO NOT insert random "SalesRobot" links in paragraphs that don't mention it
-8. DO NOT add promotional text or CTAs that weren't in the original
-9. ONLY fix/update existing SalesRobot mentions - never add new ones
 
 **YOUR REWRITING PROCESS:**
-1. Fix factual errors found by research: Update pricing accurately, correct feature descriptions, fix stats
-2. Add missing AI features (HIGH PRIORITY): AI Voice Clone, AI Appointment Setter, SalesGPT, Smart Reply Detection, AI Comment Automation
-3. Fix grammar: Remove em-dashes, eliminate banned words, shorten 30+ word sentences, add contractions, use active voice
-4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links/tables/widgets, preserve ALL <figure>, <img>, <table>, <iframe>, <script>, and <embed> tags with all their attributes
-5. Add TL;DR if missing at the very start: 3-4 sentences covering main points
-
-**CRITICAL: Return the COMPLETE HTML content including ALL images, tables (as HTML tables, not text), widgets, and embeds. Do not truncate, simplify, or summarize. Return every single paragraph, heading, image, table row, widget, and section from the original with your edits applied. Use only HTML tags, never markdown syntax. Never convert structured HTML elements like tables into plain text descriptions.**
+1. Fix factual errors found by research
+2. Add missing AI features
+3. Fix grammar
+4. Preserve structure
+5. Add TL;DR if missing
 
 Return only the complete rewritten HTML content with all images, tables, and widgets preserved exactly as HTML.`;
 
@@ -277,16 +260,6 @@ function VisualEditor({ content, onChange }) {
           margin: 1.5rem 0;
           border-radius: 0.5rem;
         }
-        .ql-editor .info-widget-heading {
-          font-weight: 600;
-          color: #92400e;
-          margin-bottom: 0.5rem;
-          font-size: 0.875rem;
-        }
-        .ql-editor .info-widget-content {
-          color: #78350f;
-          font-size: 0.875rem;
-        }
         .ql-editor .hidden {
           display: block !important;
           visibility: visible !important;
@@ -331,12 +304,13 @@ export default function ContentOps() {
     }
   }, []);
 
+  // FIX: Only calculate highlights ONCE when result changes, not on every edit
   useEffect(() => {
-    if (result && editedContent && result.originalContent) {
-      const highlighted = createHighlightedHTML(result.originalContent, editedContent);
+    if (result && result.content && result.originalContent && !highlightedData) {
+      const highlighted = createHighlightedHTML(result.originalContent, result.content);
       setHighlightedData(highlighted);
     }
-  }, [editedContent, result]);
+  }, [result]);
 
   useEffect(() => {
     if (editablePreviewRef.current && editMode === 'html') {
@@ -344,6 +318,7 @@ export default function ContentOps() {
     }
   }, [editedContent, editMode]);
 
+  // FIX: Removed highlightedData from dependencies to prevent loop
   useEffect(() => {
     if (afterViewRef.current && viewMode === 'changes') {
       const contentToShow = showHighlights 
@@ -351,7 +326,7 @@ export default function ContentOps() {
         : editedContent;
       afterViewRef.current.innerHTML = contentToShow;
     }
-  }, [viewMode, showHighlights, highlightedData]);
+  }, [viewMode, showHighlights, editedContent]);
 
   const handleEditablePreviewInput = () => {
     if (editablePreviewRef.current) {
@@ -647,8 +622,6 @@ export default function ContentOps() {
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
     
     const fullOriginalContent = blog.fieldData['post-body'] || '';
-    const originalCharCount = fullOriginalContent.length;
-    const originalImageCount = (fullOriginalContent.match(/<img/g) || []).length;
     
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
@@ -671,23 +644,9 @@ export default function ContentOps() {
       
       const data = await response.json();
       let updatedContent = data.content || fullOriginalContent;
-      
       updatedContent = updatedContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       
-      const hasHTMLTags = updatedContent.match(/<[a-z][\s\S]*>/i);
-      if (!hasHTMLTags && fullOriginalContent.match(/<[a-z][\s\S]*>/i)) {
-        console.error('❌ Backend converted HTML to plain text!');
-        updatedContent = fullOriginalContent;
-      }
-      
-      const returnedCharCount = updatedContent.length;
-      const truncationThreshold = 0.7;
-      
-      if (returnedCharCount < originalCharCount * truncationThreshold) {
-        console.warn('⚠️ Backend may have truncated content');
-        updatedContent = fullOriginalContent;
-      }
-      
+      // FIX: Calculate highlights immediately after analysis
       const highlighted = createHighlightedHTML(fullOriginalContent, updatedContent);
       setHighlightedData(highlighted);
       
@@ -702,17 +661,11 @@ export default function ContentOps() {
       });
       
       setEditedContent(updatedContent);
-      setStatus({ 
-        type: returnedCharCount < originalCharCount * truncationThreshold ? 'error' : 'success', 
-        message: returnedCharCount < originalCharCount * truncationThreshold 
-          ? `⚠️ Content truncated by backend. Using original. ${data.searchesUsed} searches, ${(data.duration/1000).toFixed(1)}s`
-          : `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${highlighted.changesCount} changes, ${(data.duration/1000).toFixed(1)}s` 
-      });
+      setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${highlighted.changesCount} changes` });
       setView('review');
       setViewMode('changes');
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
-      console.error('Analysis error:', error);
     } finally {
       setLoading(false);
     }
@@ -805,12 +758,10 @@ export default function ContentOps() {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Claude API Key</label>
                   <input type="password" value={config.anthropicKey} onChange={(e) => setConfig({...config, anthropicKey: e.target.value})} placeholder="sk-ant-..." className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent" />
-                  <p className="text-xs text-gray-500 mt-1">Used for Stage 2: Content rewriting only</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Brave Search API Key</label>
                   <input type="password" value={config.braveKey} onChange={(e) => setConfig({...config, braveKey: e.target.value})} placeholder="BSA..." className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent" />
-                  <p className="text-xs text-gray-500 mt-1">Used for Stage 1: Pure research (2000 free/month)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Webflow API Token</label>
@@ -838,7 +789,7 @@ export default function ContentOps() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-[#0f172a]">Your Blog Posts</h2>
-                <p className="text-gray-600 text-sm mt-1">Click to analyze: Brave Research → Claude Rewrite → Full Blog Diff</p>
+                <p className="text-gray-600 text-sm mt-1">Click to analyze</p>
               </div>
               <button onClick={fetchBlogs} disabled={loading} className="bg-white text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 border border-gray-300 hover:bg-gray-50">
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Refresh
@@ -852,7 +803,7 @@ export default function ContentOps() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {blogs.map(blog => (
-                  <div key={blog.id} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-all group">
+                  <div key={blog.id} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-all">
                     <h3 className="font-semibold text-[#0f172a] mb-2 line-clamp-2">{blog.fieldData.name}</h3>
                     <p className="text-sm text-gray-600 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
                     <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-[#0ea5e9] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7] disabled:opacity-50 shadow-sm">
@@ -950,14 +901,14 @@ export default function ContentOps() {
                   {editMode === 'visual' ? (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✨ Visual mode: Type naturally, add links (🔗), insert images (🖼️), format text</p>
+                        <p className="text-blue-800 text-sm">✨ Visual mode: Type naturally, add links, insert images, format text</p>
                       </div>
                       <VisualEditor content={editedContent} onChange={setEditedContent} />
                     </>
                   ) : (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML (left) or click in the preview (right) to edit visually</p>
+                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML or click in preview to edit visually</p>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
@@ -977,9 +928,9 @@ export default function ContentOps() {
                           <div className="bg-gradient-to-r from-green-50 to-blue-50 px-4 py-2 border-b border-green-200 flex items-center justify-between">
                             <span className="text-gray-700 text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
                               <Eye className="w-4 h-4" />
-                              ✏️ Live Editable Preview
+                              ✏️ Live Preview
                             </span>
-                            <span className="text-xs text-green-600 font-semibold">Click anywhere to edit</span>
+                            <span className="text-xs text-green-600 font-semibold">Click to edit</span>
                           </div>
                           <style>{`
                             .html-preview img {
@@ -988,11 +939,6 @@ export default function ContentOps() {
                               display: block;
                               margin: 1rem 0;
                               cursor: pointer;
-                              transition: all 0.2s;
-                            }
-                            .html-preview img:hover {
-                              outline: 2px solid #0ea5e9;
-                              outline-offset: 2px;
                             }
                             .html-preview table {
                               width: 100%;
@@ -1002,8 +948,6 @@ export default function ContentOps() {
                             }
                             .html-preview th {
                               background-color: #f3f4f6;
-                              font-weight: 600;
-                              text-align: left;
                               padding: 0.75rem;
                               border: 1px solid #e5e7eb;
                             }
@@ -1011,12 +955,8 @@ export default function ContentOps() {
                               padding: 0.75rem;
                               border: 1px solid #e5e7eb;
                             }
-                            .html-preview tbody tr:nth-child(even) {
-                              background-color: #f9fafb;
-                            }
                             .html-preview p {
                               margin: 0.75rem 0;
-                              line-height: 1.6;
                             }
                             .html-preview h1 {
                               font-size: 2.25rem;
@@ -1060,9 +1000,8 @@ export default function ContentOps() {
                   <div className="flex items-center justify-between">
                     <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-1 mr-3">
                       <p className="text-blue-800 text-sm">
-                        ✨ <span className="font-semibold">Edit content directly!</span> Use toolbar to format (B, I, H1-H3, Link, Image) • 
-                        {showHighlights && <span className="text-blue-600"><span className="font-semibold">{highlightedData?.changesCount || 0} AI changes</span> highlighted in blue</span>}
-                        {!showHighlights && <span className="text-green-600">Clean view active</span>}
+                        ✨ <span className="font-semibold">Edit content directly!</span> Use toolbar to format
+                        {showHighlights && <span className="ml-1 text-blue-600"><span className="font-semibold">{highlightedData?.changesCount || 0} AI changes</span> highlighted</span>}
                       </p>
                     </div>
                     <button
@@ -1084,13 +1023,6 @@ export default function ContentOps() {
                       display: block;
                       margin: 1rem 0;
                       cursor: pointer;
-                      transition: all 0.2s;
-                      border-radius: 4px;
-                    }
-                    .blog-content img:hover {
-                      outline: 3px solid #0ea5e9;
-                      outline-offset: 2px;
-                      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
                     }
                     .blog-content table {
                       width: 100%;
@@ -1100,8 +1032,6 @@ export default function ContentOps() {
                     }
                     .blog-content th {
                       background-color: #f3f4f6;
-                      font-weight: 600;
-                      text-align: left;
                       padding: 0.75rem;
                       border: 1px solid #e5e7eb;
                     }
@@ -1111,7 +1041,6 @@ export default function ContentOps() {
                     }
                     .blog-content p {
                       margin: 0.75rem 0;
-                      line-height: 1.6;
                     }
                     .blog-content h1 {
                       font-size: 2.25rem;
@@ -1133,21 +1062,21 @@ export default function ContentOps() {
                   <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
                     <div className="text-[#0ea5e9] text-sm font-bold mb-2 uppercase tracking-wide flex items-center justify-between">
                       <span>📝 EDITABLE CONTENT {showHighlights && '(Changes Highlighted)'}</span>
-                      <span className="text-xs text-green-600 font-semibold normal-case">Click anywhere to edit</span>
+                      <span className="text-xs text-green-600 font-semibold normal-case">Click to edit</span>
                     </div>
                     
                     <div className="flex items-center gap-2 mb-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-lg flex-wrap">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => formatText('bold')}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 font-bold text-sm transition-colors"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 font-bold text-sm"
                           title="Bold"
                         >
                           B
                         </button>
                         <button
                           onClick={() => formatText('italic')}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 italic text-sm transition-colors"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 italic text-sm"
                           title="Italic"
                         >
                           I
@@ -1159,22 +1088,22 @@ export default function ContentOps() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => formatHeading(1)}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold transition-colors"
-                          title="Heading 1"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold"
+                          title="H1"
                         >
                           H1
                         </button>
                         <button
                           onClick={() => formatHeading(2)}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold transition-colors"
-                          title="Heading 2"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold"
+                          title="H2"
                         >
                           H2
                         </button>
                         <button
                           onClick={() => formatHeading(3)}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-semibold transition-colors"
-                          title="Heading 3"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-semibold"
+                          title="H3"
                         >
                           H3
                         </button>
@@ -1185,14 +1114,14 @@ export default function ContentOps() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={insertLink}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1 transition-colors"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm"
                           title="Add Link"
                         >
                           🔗 Link
                         </button>
                         <button
                           onClick={insertImage}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1 transition-colors"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm"
                           title="Add Image"
                         >
                           🖼️ Image
@@ -1220,9 +1149,9 @@ export default function ContentOps() {
             </div>
             
             <div className="flex gap-4">
-              <button onClick={() => setView('dashboard')} className="flex-1 bg-gray-100 text-gray-700 py-4 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300">← Cancel</button>
+              <button onClick={() => setView('dashboard')} className="flex-1 bg-gray-100 text-gray-700 py-4 rounded-lg font-semibold hover:bg-gray-200">← Cancel</button>
               <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-[#0ea5e9] text-white py-4 px-8 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg">
-                {loading ? <><Loader className="w-5 h-5 animate-spin" />Publishing...</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}
+                {loading ? <><Loader className="w-5 h-5 animate-spin" />Publishing...</> : <><CheckCircle className="w-5 h-5" />Publish</>}
               </button>
             </div>
           </div>
@@ -1245,27 +1174,24 @@ export default function ContentOps() {
       {imageAltModal.show && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 })}>
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-[#0f172a] mb-4">Edit Image Alt Text</h3>
-            
+            <h3 className="text-xl font-bold text-[#0f172a] mb-4">Edit Image</h3>
             <div className="mb-4">
               <img src={imageAltModal.src} alt={imageAltModal.currentAlt} className="max-w-full h-auto rounded-lg border border-gray-200 mb-4" style={{ maxHeight: '300px' }} />
             </div>
-            
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Alt Text</label>
               <textarea
                 value={imageAltModal.currentAlt}
                 onChange={(e) => setImageAltModal({ ...imageAltModal, currentAlt: e.target.value })}
                 placeholder="Describe this image..."
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent resize-none"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
                 rows="3"
               />
             </div>
-            
             <div className="flex gap-3">
               <button 
                 onClick={() => setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 })}
-                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200"
               >
                 Cancel
               </button>
@@ -1292,7 +1218,6 @@ export default function ContentOps() {
             <h3 className="text-xl font-bold text-[#0f172a] mb-4">
               {editingLink ? '✏️ Edit Link' : '🔗 Add Link'}
             </h3>
-            
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Link URL</label>
               <input
@@ -1300,12 +1225,11 @@ export default function ContentOps() {
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="https://example.com"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
                 autoFocus
                 onKeyPress={(e) => e.key === 'Enter' && applyLink()}
               />
             </div>
-            
             <div className="flex gap-3">
               <button 
                 onClick={() => { 
@@ -1313,11 +1237,10 @@ export default function ContentOps() {
                   setLinkUrl(''); 
                   setEditingLink(null);
                 }}
-                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200"
               >
                 Cancel
               </button>
-              
               {editingLink && (
                 <button 
                   onClick={() => {
@@ -1325,12 +1248,10 @@ export default function ContentOps() {
                       const text = editingLink.textContent;
                       const textNode = document.createTextNode(text);
                       editingLink.parentNode.replaceChild(textNode, editingLink);
-                      
                       if (afterViewRef.current) {
                         setEditedContent(afterViewRef.current.innerHTML);
                       }
                     }
-                    
                     setShowLinkModal(false);
                     setLinkUrl('');
                     setEditingLink(null);
@@ -1340,7 +1261,6 @@ export default function ContentOps() {
                   🗑️ Remove
                 </button>
               )}
-              
               <button 
                 onClick={applyLink}
                 className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
@@ -1356,7 +1276,6 @@ export default function ContentOps() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowImageModal(false)}>
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-[#0f172a] mb-4">🖼️ Add Image</h3>
-            
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Upload Image</label>
               <input
@@ -1369,19 +1288,15 @@ export default function ContentOps() {
                     setImageUrl('');
                   }
                 }}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
               />
-              {imageFile && (
-                <p className="text-xs text-green-700 mt-2">✓ {imageFile.name}</p>
-              )}
+              {imageFile && <p className="text-xs text-green-700 mt-2">✓ {imageFile.name}</p>}
             </div>
-
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 border-t border-gray-300"></div>
               <span className="text-sm text-gray-500 font-semibold">OR</span>
               <div className="flex-1 border-t border-gray-300"></div>
             </div>
-            
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Image URL</label>
               <input
@@ -1392,11 +1307,10 @@ export default function ContentOps() {
                   setImageFile(null);
                 }}
                 placeholder="https://example.com/image.jpg"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
                 onKeyPress={(e) => e.key === 'Enter' && applyImage()}
               />
             </div>
-            
             <div className="flex gap-3">
               <button 
                 onClick={() => { 
@@ -1404,7 +1318,7 @@ export default function ContentOps() {
                   setImageUrl(''); 
                   setImageFile(null);
                 }}
-                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200"
               >
                 Cancel
               </button>
@@ -1422,7 +1336,6 @@ export default function ContentOps() {
       <footer className="bg-[#0f172a] border-t border-gray-800 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-gray-400 text-sm">
           <p>🔒 All API keys stored securely in your browser</p>
-          <p className="mt-2 text-gray-500">ContentOps • Brave Research → Claude Writing → Full Blog Diff</p>
         </div>
       </footer>
     </div>
