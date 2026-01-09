@@ -276,6 +276,7 @@ export default function ContentOps() {
   const [highlightedData, setHighlightedData] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
   const [showHighlights, setShowHighlights] = useState(true);
+  const editablePreviewRef = useRef(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -293,6 +294,19 @@ export default function ContentOps() {
       setHighlightedData(highlighted);
     }
   }, [editedContent, result]);
+
+  // Sync content to editable preview div
+  useEffect(() => {
+    if (editablePreviewRef.current && editMode === 'html') {
+      editablePreviewRef.current.innerHTML = editedContent;
+    }
+  }, [editedContent, editMode]);
+
+  const handleEditablePreviewInput = () => {
+    if (editablePreviewRef.current) {
+      setEditedContent(editablePreviewRef.current.innerHTML);
+    }
+  };
 
   const handleImageClick = (e) => {
     if (e.target.tagName === 'IMG') {
@@ -833,7 +847,7 @@ export default function ContentOps() {
                   ) : (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly • Live preview shows images and formatting • <span className="font-semibold">Click any image in preview to add/edit alt text</span></p>
+                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML (left) or click in the preview (right) to edit visually • <span className="font-semibold">Tables, widgets, and images render perfectly in preview!</span></p>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {/* HTML Code Editor */}
@@ -850,11 +864,14 @@ export default function ContentOps() {
                           />
                         </div>
 
-                        {/* Live Preview */}
-                        <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
-                          <div className="bg-gray-100 px-4 py-2 border-b border-gray-300 flex items-center justify-between">
-                            <span className="text-gray-700 text-xs font-semibold uppercase tracking-wide">Live Preview</span>
-                            <Eye className="w-4 h-4 text-gray-500" />
+                        {/* Live Preview - Now Editable! */}
+                        <div className="bg-white rounded-lg border-2 border-green-400 overflow-hidden shadow-md">
+                          <div className="bg-gradient-to-r from-green-50 to-blue-50 px-4 py-2 border-b border-green-200 flex items-center justify-between">
+                            <span className="text-gray-700 text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
+                              <Eye className="w-4 h-4" />
+                              ✏️ Live Editable Preview
+                            </span>
+                            <span className="text-xs text-green-600 font-semibold">Click anywhere to edit</span>
                           </div>
                           <style>{`
                             .html-preview img {
@@ -888,6 +905,13 @@ export default function ContentOps() {
                             }
                             .html-preview tbody tr:nth-child(even) {
                               background-color: #f9fafb;
+                            }
+                            .html-preview td:hover, .html-preview th:hover {
+                              background-color: #e0f2fe;
+                              cursor: text;
+                            }
+                            .html-preview p:hover, .html-preview h1:hover, .html-preview h2:hover, .html-preview h3:hover {
+                              background-color: rgba(224, 242, 254, 0.3);
                             }
                             .html-preview iframe, .html-preview embed {
                               max-width: 100%;
@@ -968,14 +992,20 @@ export default function ContentOps() {
                             }
                           `}</style>
                           <div 
+                            ref={editablePreviewRef}
                             className="html-preview text-gray-800 overflow-y-auto p-4"
+                            contentEditable={true}
+                            suppressContentEditableWarning={true}
+                            onInput={handleEditablePreviewInput}
+                            onBlur={handleEditablePreviewInput}
                             onClick={handleImageClick}
                             style={{ 
                               fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                               height: '800px',
-                              lineHeight: '1.6'
+                              lineHeight: '1.6',
+                              outline: 'none',
+                              cursor: 'text'
                             }}
-                            dangerouslySetInnerHTML={{ __html: editedContent }}
                           />
                         </div>
                       </div>
