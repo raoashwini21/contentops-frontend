@@ -461,7 +461,8 @@ export default function ContentOps() {
   const saveSelection = () => {
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
-      setSavedSelection(selection.getRangeAt(0));
+      setSavedSelection(selection.getRangeAt(0).cloneRange());
+      console.log('💾 Selection saved for later use');
     }
   };
 
@@ -609,42 +610,46 @@ export default function ContentOps() {
       editingLink.rel = 'noopener noreferrer';
       console.log('🔗 Link updated:', linkUrl);
     } else {
-      // Creating new link
-      restoreSelection();
-      
-      const selection = window.getSelection();
-      const selectedText = selection.toString();
-      
-      // Create link element
-      const link = document.createElement('a');
-      link.href = linkUrl;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.style.color = '#0ea5e9';
-      link.style.textDecoration = 'underline';
-      
-      if (selectedText) {
-        // Use selected text as link text
-        link.textContent = selectedText;
+      // Creating new link - USE SAVED SELECTION!
+      if (savedSelection) {
+        // Restore the saved selection
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(savedSelection);
         
-        // Replace selection with link
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(link);
-        range.setStartAfter(link);
-        range.collapse(true);
+        const selectedText = selection.toString();
         
-        console.log('🔗 Link created:', linkUrl);
-      } else {
-        // No text selected, insert link with URL as text
-        link.textContent = linkUrl;
+        // Create link element
+        const link = document.createElement('a');
+        link.href = linkUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.style.color = '#0ea5e9';
+        link.style.textDecoration = 'underline';
         
-        if (savedSelection) {
+        if (selectedText) {
+          // Use selected text as link text
+          link.textContent = selectedText;
+          
+          // Replace selection with link
+          savedSelection.deleteContents();
           savedSelection.insertNode(link);
-          savedSelection.collapse(false);
+          savedSelection.setStartAfter(link);
+          savedSelection.collapse(true);
+          
+          console.log('🔗 Link created at saved position:', linkUrl);
+        } else {
+          // No text selected, insert link with URL as text
+          link.textContent = linkUrl;
+          savedSelection.insertNode(link);
+          savedSelection.setStartAfter(link);
+          savedSelection.collapse(true);
+          
+          console.log('🔗 Link inserted at saved position:', linkUrl);
         }
-        
-        console.log('🔗 Link inserted:', linkUrl);
+      } else {
+        alert('No cursor position saved. Please click in the editor first.');
+        return;
       }
     }
     
@@ -669,6 +674,7 @@ export default function ContentOps() {
 
   // Insert image
   const insertImage = () => {
+    saveSelection(); // CRITICAL: Save cursor position BEFORE modal opens!
     setShowImageModal(true);
   };
 
@@ -710,16 +716,25 @@ export default function ContentOps() {
     img.style.margin = '1rem 0';
     img.alt = 'Inserted image';
 
-    afterViewRef.current?.focus();
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      range.insertNode(img);
-      range.collapse(false);
-      console.log('🖼️ Image inserted');
+    // USE SAVED SELECTION (not current selection!)
+    if (savedSelection) {
+      // Restore the saved selection
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(savedSelection);
+      
+      // Insert image at saved position
+      savedSelection.insertNode(img);
+      
+      // Move cursor after image
+      savedSelection.setStartAfter(img);
+      savedSelection.collapse(true);
+      
+      console.log('🖼️ Image inserted at saved position');
     } else {
+      // Fallback: append to end if no saved selection
       afterViewRef.current?.appendChild(img);
-      console.log('🖼️ Image appended');
+      console.log('🖼️ Image appended to end (no saved position)');
     }
     
     // Force update after a short delay
