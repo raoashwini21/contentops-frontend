@@ -331,8 +331,7 @@ export default function ContentOps() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
-  const [linkType, setLinkType] = useState('external'); // 'external' or 'heading'
-  const [selectedHeading, setSelectedHeading] = useState('');
+  const [editingLink, setEditingLink] = useState(null); // Store link element being edited
   const [imageUrl, setImageUrl] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [savedSelection, setSavedSelection] = useState(null);
@@ -450,7 +449,7 @@ export default function ContentOps() {
     }
   };
 
-  // Format text (bold, italic) - Using manual approach for better reliability
+  // Format text (bold, italic) - With toggle support
   const formatText = (command) => {
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
@@ -463,9 +462,36 @@ export default function ContentOps() {
       return;
     }
     
-    // Create the appropriate tag
-    const tag = command === 'bold' ? 'strong' : 'em';
-    const element = document.createElement(tag);
+    // Check if already formatted - if so, remove formatting
+    const parentElement = range.commonAncestorContainer.parentElement;
+    const tag = command === 'bold' ? 'STRONG' : 'EM';
+    
+    // Check if selection is inside the formatting tag
+    let formattedParent = parentElement;
+    while (formattedParent && formattedParent !== afterViewRef.current) {
+      if (formattedParent.tagName === tag || 
+          (command === 'bold' && formattedParent.tagName === 'B') ||
+          (command === 'italic' && formattedParent.tagName === 'I')) {
+        // Already formatted - remove the tag
+        const text = formattedParent.textContent;
+        const textNode = document.createTextNode(text);
+        formattedParent.parentNode.replaceChild(textNode, formattedParent);
+        console.log(`✏️ Removed ${command} formatting`);
+        
+        // Save changes
+        setTimeout(() => {
+          if (afterViewRef.current) {
+            setEditedContent(afterViewRef.current.innerHTML);
+            console.log('💾 Saved unformatted content');
+          }
+        }, 50);
+        return;
+      }
+      formattedParent = formattedParent.parentElement;
+    }
+    
+    // Not formatted - add formatting
+    const element = document.createElement(command === 'bold' ? 'strong' : 'em');
     element.textContent = selectedText;
     
     // Replace the selected text with formatted version
@@ -478,13 +504,12 @@ export default function ContentOps() {
     selection.removeAllRanges();
     selection.addRange(range);
     
-    console.log(`✏️ Applied ${command} formatting manually`);
+    console.log(`✏️ Applied ${command} formatting`);
     
     // Save changes
     setTimeout(() => {
       if (afterViewRef.current) {
-        const currentHTML = afterViewRef.current.innerHTML;
-        setEditedContent(currentHTML);
+        setEditedContent(afterViewRef.current.innerHTML);
         console.log('💾 Saved formatted content');
       }
     }, 50);
@@ -513,97 +538,89 @@ export default function ContentOps() {
     }, 50);
   };
 
-  // Insert link
+  // Insert link or edit existing link
   const insertLink = () => {
+    const selection = window.getSelection();
+    
+    // Check if clicked on a link
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      let element = range.commonAncestorContainer;
+      
+      // Walk up the tree to find if we're inside a link
+      while (element && element !== afterViewRef.current) {
+        if (element.tagName === 'A') {
+          // Editing existing link
+          setEditingLink(element);
+          setLinkUrl(element.href);
+          setShowLinkModal(true);
+          console.log('✏️ Editing existing link:', element.href);
+          return;
+        }
+        element = element.parentElement;
+      }
+    }
+    
+    // Creating new link
     saveSelection();
+    setEditingLink(null);
+    setLinkUrl('');
     setShowLinkModal(true);
   };
 
-  // Get all headings from content for anchor link dropdown
-  const getHeadingsFromContent = () => {
-    if (!afterViewRef.current) return [];
-    
-    const headings = afterViewRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    return Array.from(headings).map((heading, index) => {
-      // Create ID if doesn't exist
-      if (!heading.id) {
-        const id = heading.textContent
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-        heading.id = id || `heading-${index}`;
-      }
-      return {
-        id: heading.id,
-        text: heading.textContent,
-        level: heading.tagName
-      };
-    });
-  };
-
   const applyLink = () => {
+    if (!linkUrl) {
+      alert('Please enter a URL');
+      return;
+    }
+    
     // Mark as user editing
     isUserEditingRef.current = true;
     
-    // Restore the saved selection
-    restoreSelection();
-    
-    const selection = window.getSelection();
-    const selectedText = selection.toString();
-    
-    let finalUrl = '';
-    
-    if (linkType === 'heading') {
-      // Create anchor link to heading
-      if (!selectedHeading) {
-        alert('Please select a heading');
-        return;
-      }
-      finalUrl = `#${selectedHeading}`;
+    if (editingLink) {
+      // Editing existing link
+      editingLink.href = linkUrl;
+      editingLink.target = '_blank';
+      editingLink.rel = 'noopener noreferrer';
+      console.log('🔗 Link updated:', linkUrl);
     } else {
-      // External link
-      if (!linkUrl) {
-        alert('Please enter a URL');
-        return;
-      }
-      finalUrl = linkUrl;
-    }
-    
-    // Create link element
-    const link = document.createElement('a');
-    link.href = finalUrl;
-    
-    // External links open in new tab
-    if (linkType === 'external') {
+      // Creating new link
+      restoreSelection();
+      
+      const selection = window.getSelection();
+      const selectedText = selection.toString();
+      
+      // Create link element
+      const link = document.createElement('a');
+      link.href = linkUrl;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-    }
-    
-    link.style.color = '#0ea5e9';
-    link.style.textDecoration = 'underline';
-    
-    if (selectedText) {
-      // Use selected text as link text
-      link.textContent = selectedText;
+      link.style.color = '#0ea5e9';
+      link.style.textDecoration = 'underline';
       
-      // Replace selection with link
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(link);
-      range.setStartAfter(link);
-      range.collapse(true);
-      
-      console.log('🔗 Link created:', linkType, finalUrl);
-    } else {
-      // No text selected, insert link with URL/heading as text
-      link.textContent = linkType === 'heading' ? selectedHeading : finalUrl;
-      
-      if (savedSelection) {
-        savedSelection.insertNode(link);
-        savedSelection.collapse(false);
+      if (selectedText) {
+        // Use selected text as link text
+        link.textContent = selectedText;
+        
+        // Replace selection with link
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(link);
+        range.setStartAfter(link);
+        range.collapse(true);
+        
+        console.log('🔗 Link created:', linkUrl);
+      } else {
+        // No text selected, insert link with URL as text
+        link.textContent = linkUrl;
+        
+        if (savedSelection) {
+          savedSelection.insertNode(link);
+          savedSelection.collapse(false);
+        }
+        
+        console.log('🔗 Link inserted:', linkUrl);
       }
-      
-      console.log('🔗 Link inserted:', linkType, finalUrl);
     }
     
     // Focus back on the editor
@@ -622,8 +639,7 @@ export default function ContentOps() {
     // Close modal and reset
     setShowLinkModal(false);
     setLinkUrl('');
-    setLinkType('external');
-    setSelectedHeading('');
+    setEditingLink(null);
   };
 
   // Insert image
@@ -696,13 +712,30 @@ export default function ContentOps() {
     setImageFile(null);
   };
 
-  const handleImageClick = (e) => {
+  const handleContentClick = (e) => {
+    // Handle image clicks
     if (e.target.tagName === 'IMG') {
       const src = e.target.src;
       const alt = e.target.alt || '';
       const allImages = editedContent.match(/<img[^>]*>/g) || [];
       const imgIndex = Array.from(e.currentTarget.querySelectorAll('img')).indexOf(e.target);
       setImageAltModal({ show: true, src, currentAlt: alt, index: imgIndex });
+      return;
+    }
+    
+    // Handle link clicks - hold Ctrl/Cmd to follow link, regular click to edit
+    if (e.target.tagName === 'A') {
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd + click = follow link
+        return; // Allow default behavior
+      }
+      
+      // Regular click = edit link
+      e.preventDefault();
+      setEditingLink(e.target);
+      setLinkUrl(e.target.href);
+      setShowLinkModal(true);
+      console.log('✏️ Editing link:', e.target.href);
     }
   };
 
@@ -1447,7 +1480,7 @@ export default function ContentOps() {
                             suppressContentEditableWarning={true}
                             onInput={handleEditablePreviewInput}
                             onBlur={handleEditablePreviewInput}
-                            onClick={handleImageClick}
+                            onClick={handleContentClick}
                             style={{ 
                               fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                               height: '800px',
@@ -1648,6 +1681,15 @@ export default function ContentOps() {
                     .blog-content a {
                       color: #0ea5e9;
                       text-decoration: underline;
+                      cursor: pointer;
+                      transition: all 0.2s;
+                    }
+                    .blog-content a:hover {
+                      background-color: rgba(14, 165, 233, 0.1);
+                      padding: 2px 4px;
+                      margin: -2px -4px;
+                      border-radius: 3px;
+                      color: #0284c7;
                     }
                     .blog-content ul, .blog-content ol {
                       margin: 1rem 0;
@@ -1749,7 +1791,7 @@ export default function ContentOps() {
                       suppressContentEditableWarning={true}
                       onInput={handleAfterViewInput}
                       onBlur={handleAfterViewInput}
-                      onClick={handleImageClick}
+                      onClick={handleContentClick}
                       onKeyDown={(e) => {
                         // Allow deleting selected images with Delete or Backspace
                         if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1852,94 +1894,77 @@ export default function ContentOps() {
       {showLinkModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-[#0f172a] mb-4">🔗 Add Link</h3>
+            <h3 className="text-xl font-bold text-[#0f172a] mb-4">
+              {editingLink ? '✏️ Edit Link' : '🔗 Add Link'}
+            </h3>
             
-            {/* Link Type Selector */}
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Link Type</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setLinkType('external')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all ${
-                    linkType === 'external'
-                      ? 'bg-[#0ea5e9] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  🌐 External Link
-                </button>
-                <button
-                  onClick={() => setLinkType('heading')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all ${
-                    linkType === 'heading'
-                      ? 'bg-[#0ea5e9] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  📑 Link to Heading
-                </button>
-              </div>
-            </div>
-
             {/* External Link Input */}
-            {linkType === 'external' && (
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">External URL</label>
-                <input
-                  type="url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
-                  autoFocus
-                  onKeyPress={(e) => e.key === 'Enter' && applyLink()}
-                />
-                <p className="text-xs text-gray-500 mt-1">✓ Opens in new tab • Select text first for better results</p>
-              </div>
-            )}
-
-            {/* Heading Selector */}
-            {linkType === 'heading' && (
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Heading</label>
-                <select
-                  value={selectedHeading}
-                  onChange={(e) => setSelectedHeading(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
-                  autoFocus
-                >
-                  <option value="">-- Choose a heading --</option>
-                  {getHeadingsFromContent().map((heading) => (
-                    <option key={heading.id} value={heading.id}>
-                      {heading.level}: {heading.text}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Creates anchor link to heading in this page</p>
-              </div>
-            )}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Link URL</label>
+              <input
+                type="url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                autoFocus
+                onKeyPress={(e) => e.key === 'Enter' && applyLink()}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                ✓ Opens in new tab automatically
+                {!editingLink && ' • Select text first for better results'}
+              </p>
+            </div>
             
             <div className="flex gap-3">
               <button 
                 onClick={() => { 
                   setShowLinkModal(false); 
                   setLinkUrl(''); 
-                  setLinkType('external');
-                  setSelectedHeading('');
+                  setEditingLink(null);
                 }}
                 className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
               >
                 Cancel
               </button>
+              
+              {editingLink && (
+                <button 
+                  onClick={() => {
+                    // Remove the link
+                    if (editingLink) {
+                      const text = editingLink.textContent;
+                      const textNode = document.createTextNode(text);
+                      editingLink.parentNode.replaceChild(textNode, editingLink);
+                      console.log('🗑️ Link removed');
+                      
+                      setTimeout(() => {
+                        if (afterViewRef.current) {
+                          setEditedContent(afterViewRef.current.innerHTML);
+                        }
+                      }, 50);
+                    }
+                    
+                    setShowLinkModal(false);
+                    setLinkUrl('');
+                    setEditingLink(null);
+                  }}
+                  className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 shadow-lg"
+                >
+                  🗑️ Remove Link
+                </button>
+              )}
+              
               <button 
                 onClick={applyLink}
                 className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
               >
-                Add Link
+                {editingLink ? 'Update Link' : 'Add Link'}
               </button>
             </div>
           </div>
         </div>
+      )}
       )}
 
       {/* Add Image Modal */}
