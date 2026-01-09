@@ -37,7 +37,9 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 - NEVER convert tables to plain text lists or descriptions - keep the exact HTML table structure
 - Keep ALL <iframe>, <script>, <embed> tags (widgets, embeds, calculators, forms)
 - Keep ALL custom Webflow elements (w-richtext-, w-embed-, w-widget-, etc.)
+- Keep ALL custom widget classes (info-widget, widget-type, widget-content, etc.)
 - Keep ALL data attributes (data-*, w-*, webflow-*)
+- Keep ALL "hidden" classes - do not remove them
 - Do NOT remove, modify, simplify, or relocate any images, tables, widgets, or embeds
 - All special elements should stay in their original positions in the content
 
@@ -69,8 +71,8 @@ Return only the complete rewritten HTML content with all images, tables, and wid
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  // Split by major blocks and preserve structure
-  const blockRegex = /<(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)[^>]*>.*?<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)>|<img[^>]*\/?>/gis;
+  // More comprehensive regex that includes widgets and custom divs
+  const blockRegex = /<(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)[^>]*>(?:(?!<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)>).)*<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)>|<img[^>]*\/?>/gis;
   
   const originalBlocks = originalHTML.match(blockRegex) || [];
   const updatedBlocks = updatedHTML.match(blockRegex) || [];
@@ -90,21 +92,25 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
     
-    // Only highlight if:
-    // 1. Block is substantial (more than 20 chars of text)
-    // 2. Block doesn't exist in original
-    // 3. Block is not a table, widget, or image (preserve those without highlighting)
-    const isSpecialElement = updatedBlock.match(/<(table|iframe|embed|script|img|figure)/i);
+    // Check if this block should be excluded from highlighting
+    const isSpecialElement = 
+      updatedBlock.match(/<(table|iframe|embed|script|img|figure)/i) ||
+      updatedBlock.match(/class="[^"]*widget[^"]*"/i) ||
+      updatedBlock.match(/class="[^"]*w-embed[^"]*"/i) ||
+      updatedBlock.match(/class="[^"]*info-widget[^"]*"/i) ||
+      updatedBlock.match(/data-w-id/i);
     
+    // Only highlight if:
+    // 1. Block has substantial text (more than 20 chars)
+    // 2. Block doesn't exist in original
+    // 3. Block is not a special element (table, widget, image, etc.)
     if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
-      // Changed section - subtle blue highlight
-      const highlighted = updatedBlock.replace(
-        /^(<[^>]+>)/,
-        `$1<span style="background-color: #e0f2fe; display: block; padding: 8px; margin: -8px; border-left: 3px solid #0ea5e9;">`
-      ).replace(/(<\/[^>]+>)$/, `</span>$1`);
+      // For block-level elements, add a wrapper div instead of inline span
+      const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
       highlightedHTML += highlighted;
       changesCount++;
     } else {
+      // Keep the block as-is without any highlighting
       highlightedHTML += updatedBlock;
     }
   });
@@ -255,6 +261,27 @@ function VisualEditor({ content, onChange }) {
           border: 1px solid #e5e7eb;
           border-radius: 0.5rem;
         }
+        .ql-editor .info-widget {
+          background-color: #fef3c7;
+          border-left: 4px solid #f59e0b;
+          padding: 1rem;
+          margin: 1.5rem 0;
+          border-radius: 0.5rem;
+        }
+        .ql-editor .info-widget-heading {
+          font-weight: 600;
+          color: #92400e;
+          margin-bottom: 0.5rem;
+          font-size: 0.875rem;
+        }
+        .ql-editor .info-widget-content {
+          color: #78350f;
+          font-size: 0.875rem;
+        }
+        .ql-editor .hidden {
+          display: block !important;
+          visibility: visible !important;
+        }
       `}</style>
       <div ref={editorRef} style={{ minHeight: '600px' }} />
     </div>
@@ -277,6 +304,12 @@ export default function ContentOps() {
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
   const [showHighlights, setShowHighlights] = useState(true);
   const editablePreviewRef = useRef(null);
+  const afterViewRef = useRef(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [savedSelection, setSavedSelection] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -302,10 +335,111 @@ export default function ContentOps() {
     }
   }, [editedContent, editMode]);
 
+  // Sync content to After view when highlights toggle or content changes
+  useEffect(() => {
+    if (afterViewRef.current && viewMode === 'changes') {
+      const contentToShow = showHighlights ? (highlightedData?.html || editedContent) : editedContent;
+      afterViewRef.current.innerHTML = contentToShow;
+    }
+  }, [editedContent, viewMode, showHighlights, highlightedData]);
+
   const handleEditablePreviewInput = () => {
     if (editablePreviewRef.current) {
       setEditedContent(editablePreviewRef.current.innerHTML);
     }
+  };
+
+  const handleAfterViewInput = () => {
+    if (afterViewRef.current) {
+      // Get the raw HTML without highlight wrappers
+      const rawHTML = afterViewRef.current.innerHTML;
+      // Remove highlight divs but keep the content
+      const cleanedHTML = rawHTML.replace(/<div style="background-color: #e0f2fe;[^"]*">(.*?)<\/div>/gs, '$1');
+      setEditedContent(cleanedHTML);
+    }
+  };
+
+  // Save current selection for link/image insertion
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      setSavedSelection(selection.getRangeAt(0));
+    }
+  };
+
+  // Restore saved selection
+  const restoreSelection = () => {
+    if (savedSelection) {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(savedSelection);
+    }
+  };
+
+  // Format text (bold, italic)
+  const formatText = (command) => {
+    document.execCommand(command, false, null);
+    afterViewRef.current?.focus();
+  };
+
+  // Insert link
+  const insertLink = () => {
+    saveSelection();
+    setShowLinkModal(true);
+  };
+
+  const applyLink = () => {
+    if (!linkUrl) return;
+    restoreSelection();
+    const selection = window.getSelection();
+    if (selection.toString()) {
+      document.execCommand('createLink', false, linkUrl);
+    } else {
+      // No text selected, insert link with URL as text
+      const link = document.createElement('a');
+      link.href = linkUrl;
+      link.textContent = linkUrl;
+      link.style.color = '#0ea5e9';
+      link.style.textDecoration = 'underline';
+      
+      if (savedSelection) {
+        savedSelection.insertNode(link);
+        savedSelection.collapse(false);
+      }
+    }
+    setShowLinkModal(false);
+    setLinkUrl('');
+    handleAfterViewInput();
+  };
+
+  // Insert image
+  const insertImage = () => {
+    setShowImageModal(true);
+  };
+
+  const applyImage = () => {
+    if (!imageUrl) return;
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
+    img.style.margin = '1rem 0';
+    img.alt = 'Inserted image';
+
+    afterViewRef.current?.focus();
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.insertNode(img);
+      range.collapse(false);
+    } else {
+      afterViewRef.current?.appendChild(img);
+    }
+    
+    setShowImageModal(false);
+    setImageUrl('');
+    handleAfterViewInput();
   };
 
   const handleImageClick = (e) => {
@@ -381,7 +515,8 @@ export default function ContentOps() {
     const originalEmbedCount = (fullOriginalContent.match(/<embed/g) || []).length;
     const originalScriptCount = (fullOriginalContent.match(/<script/g) || []).length;
     const originalWidgetCount = (fullOriginalContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length +
-                                 (fullOriginalContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length;
+                                 (fullOriginalContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length +
+                                 (fullOriginalContent.match(/class="[^"]*info-widget[^"]*"/g) || []).length;
     
     console.log('📝 Post body length:', originalCharCount);
     console.log('🖼️ Original images found:', originalImageCount);
@@ -456,7 +591,8 @@ export default function ContentOps() {
       const returnedEmbedCount = (updatedContent.match(/<embed/g) || []).length;
       const returnedScriptCount = (updatedContent.match(/<script/g) || []).length;
       const returnedWidgetCount = (updatedContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length +
-                                   (updatedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length;
+                                   (updatedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length +
+                                   (updatedContent.match(/class="[^"]*info-widget[^"]*"/g) || []).length;
       
       console.log('🔍 Backend response check:');
       console.log('   Original images:', originalImageCount, '| Returned images:', returnedImageCount);
@@ -764,7 +900,8 @@ export default function ContentOps() {
                   <span className="text-blue-700">🔌 Widgets:</span>
                   <span className="text-blue-900 font-semibold">
                     {(editedContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length + 
-                     (editedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length}
+                     (editedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length +
+                     (editedContent.match(/class="[^"]*info-widget[^"]*"/g) || []).length}
                   </span>
                 </div>
               </div>
@@ -922,6 +1059,36 @@ export default function ContentOps() {
                             .html-preview .w-embed, .html-preview [class*="w-"], .html-preview [data-w-id] {
                               margin: 1rem 0;
                             }
+                            .html-preview .info-widget {
+                              background-color: #fef3c7;
+                              border-left: 4px solid #f59e0b;
+                              padding: 1rem;
+                              margin: 1.5rem 0;
+                              border-radius: 0.5rem;
+                            }
+                            .html-preview .info-widget-heading {
+                              font-weight: 600;
+                              color: #92400e;
+                              margin-bottom: 0.5rem;
+                              font-size: 0.875rem;
+                              text-transform: uppercase;
+                              letter-spacing: 0.05em;
+                            }
+                            .html-preview .info-widget-content {
+                              color: #78350f;
+                              font-size: 0.875rem;
+                              line-height: 1.5;
+                            }
+                            .html-preview .widget-type {
+                              font-weight: 600;
+                              color: #92400e;
+                              font-size: 0.875rem;
+                              text-transform: uppercase;
+                            }
+                            .html-preview .hidden {
+                              display: block !important;
+                              visibility: visible !important;
+                            }
                             .html-preview figure {
                               margin: 1rem 0;
                               max-width: 100% !important;
@@ -1018,7 +1185,7 @@ export default function ContentOps() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-blue-800 text-sm">✨ Full blog comparison • {highlightedData?.changesCount || 0} sections highlighted in blue</p>
+                      <p className="text-blue-800 text-sm">✨ <span className="font-semibold">AFTER panel is now editable!</span> • Click tables, text, or headings to edit directly • {highlightedData?.changesCount || 0} sections highlighted in blue</p>
                     </div>
                     <button
                       onClick={() => setShowHighlights(!showHighlights)}
@@ -1069,6 +1236,16 @@ export default function ContentOps() {
                     .blog-content tbody tr:nth-child(even) {
                       background-color: #f9fafb;
                     }
+                    .blog-content td:hover, .blog-content th:hover {
+                      background-color: #dbeafe !important;
+                      cursor: text;
+                      outline: 1px solid #3b82f6;
+                    }
+                    .blog-content p:hover, .blog-content h1:hover, .blog-content h2:hover, .blog-content h3:hover, .blog-content li:hover {
+                      background-color: rgba(219, 234, 254, 0.3);
+                      outline: 1px dashed #3b82f6;
+                      cursor: text;
+                    }
                     .blog-content iframe, .blog-content embed {
                       max-width: 100%;
                       margin: 1.5rem 0;
@@ -1077,6 +1254,42 @@ export default function ContentOps() {
                     }
                     .blog-content .w-embed, .blog-content [class*="w-"], .blog-content [data-w-id] {
                       margin: 1rem 0;
+                    }
+                    .blog-content .info-widget, .blog-content [class*="widget"] {
+                      margin: 1rem 0;
+                      padding: 1rem;
+                      border-left: 3px solid #6366f1;
+                      background-color: #f5f3ff;
+                    }
+                    .blog-content .info-widget {
+                      background-color: #fef3c7;
+                      border-left: 4px solid #f59e0b;
+                      padding: 1rem;
+                      margin: 1.5rem 0;
+                      border-radius: 0.5rem;
+                    }
+                    .blog-content .info-widget-heading {
+                      font-weight: 600;
+                      color: #92400e;
+                      margin-bottom: 0.5rem;
+                      font-size: 0.875rem;
+                      text-transform: uppercase;
+                      letter-spacing: 0.05em;
+                    }
+                    .blog-content .info-widget-content {
+                      color: #78350f;
+                      font-size: 0.875rem;
+                      line-height: 1.5;
+                    }
+                    .blog-content .widget-type {
+                      font-weight: 600;
+                      color: #92400e;
+                      font-size: 0.875rem;
+                      text-transform: uppercase;
+                    }
+                    .blog-content .hidden {
+                      display: block !important;
+                      visibility: visible !important;
                     }
                     .blog-content p {
                       margin: 0.75rem 0;
@@ -1150,18 +1363,63 @@ export default function ContentOps() {
                       />
                     </div>
 
-                    {/* AFTER with highlights */}
-                    <div className="bg-white rounded-xl p-6 border border-[#0ea5e9]">
-                      <div className="text-[#0ea5e9] text-sm font-bold mb-4 uppercase tracking-wide sticky top-0 bg-white py-2 flex items-center justify-between">
-                        <span>✅ AFTER (Updated{showHighlights ? ' - Changes Highlighted' : ''})</span>
+                    {/* AFTER with highlights - NOW EDITABLE */}
+                    <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
+                      <div className="text-[#0ea5e9] text-sm font-bold mb-2 uppercase tracking-wide sticky top-0 bg-white py-2 flex items-center justify-between">
+                        <span>✅ AFTER (Updated{showHighlights ? ' - Changes Highlighted' : ''}) ✏️</span>
+                        <span className="text-xs text-green-600 font-semibold normal-case">Click to edit!</span>
                       </div>
+                      
+                      {/* Mini Toolbar */}
+                      <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 border border-gray-200 rounded-lg flex-wrap">
+                        <button
+                          onClick={() => formatText('bold')}
+                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 font-bold text-sm"
+                          title="Bold (Ctrl+B)"
+                        >
+                          B
+                        </button>
+                        <button
+                          onClick={() => formatText('italic')}
+                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 italic text-sm"
+                          title="Italic (Ctrl+I)"
+                        >
+                          I
+                        </button>
+                        <div className="w-px h-6 bg-gray-300"></div>
+                        <button
+                          onClick={insertLink}
+                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1"
+                          title="Add Link"
+                        >
+                          🔗 Link
+                        </button>
+                        <button
+                          onClick={insertImage}
+                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1"
+                          title="Add Image"
+                        >
+                          🖼️ Image
+                        </button>
+                        <div className="ml-auto text-xs text-gray-500">
+                          Select text first for bold/italic/link
+                        </div>
+                      </div>
+                      
                       <div 
+                        ref={afterViewRef}
                         className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onInput={handleAfterViewInput}
+                        onBlur={handleAfterViewInput}
+                        onClick={handleImageClick}
                         style={{ 
                           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                          maxHeight: '800px'
+                          maxHeight: '800px',
+                          outline: 'none',
+                          cursor: 'text'
                         }}
-                        dangerouslySetInnerHTML={{ __html: showHighlights ? (highlightedData?.html || editedContent) : editedContent }}
                       />
                     </div>
                   </div>
@@ -1231,6 +1489,89 @@ export default function ContentOps() {
                 className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
               >
                 Save Alt Text
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Link Modal */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowLinkModal(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-[#0f172a] mb-4">🔗 Add Link</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Link URL</label>
+              <input
+                type="url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                autoFocus
+                onKeyPress={(e) => e.key === 'Enter' && applyLink()}
+              />
+              <p className="text-xs text-gray-500 mt-1">Tip: Select text first, then click Link button</p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => { setShowLinkModal(false); setLinkUrl(''); }}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={applyLink}
+                className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
+              >
+                Add Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Image Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowImageModal(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-[#0f172a] mb-4">🖼️ Add Image</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Image URL</label>
+              <input
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                autoFocus
+                onKeyPress={(e) => e.key === 'Enter' && applyImage()}
+              />
+              <p className="text-xs text-gray-500 mt-1">Enter the full URL of the image you want to insert</p>
+              
+              {imageUrl && (
+                <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <p className="text-xs text-gray-600 mb-2">Preview:</p>
+                  <img src={imageUrl} alt="Preview" className="max-w-full h-auto rounded" style={{ maxHeight: '150px' }} onError={(e) => e.target.style.display = 'none'} />
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => { setShowImageModal(false); setImageUrl(''); }}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={applyImage}
+                className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
+              >
+                Insert Image
               </button>
             </div>
           </div>
