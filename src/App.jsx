@@ -2005,7 +2005,7 @@ export default function ContentOps() {
           </div>
         </div>
       )}
-      )}
+      
 
       {/* Add Image Modal */}
       {showImageModal && (
