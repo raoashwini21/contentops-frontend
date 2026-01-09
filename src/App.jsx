@@ -21,15 +21,24 @@ Be thorough but concise. Focus on accuracy.`;
 const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
 
 **CRITICAL WRITING RULES:**
-NEVER USE: Em-dashes, banned words (transform, delve, unleash, revolutionize, meticulous, navigating, realm, bespoke, tailored, autopilot, magic), sentences over 30 words
-ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct address, bold for key points
+NEVER USE: Em-dashes, banned words (transform, delve, unleash, revolutionize, meticulous, navigating, realm, bespoke, tailored, autopilot, magic), sentences over 30 words, markdown syntax
+ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct address, HTML bold tags (<strong> or <b>), proper HTML formatting
 
-**CRITICAL: PRESERVE ALL IMAGES AND MEDIA**
+**FORMATTING REQUIREMENTS:**
+- Use <strong>text</strong> or <b>text</b> for bold (NEVER use **text** markdown syntax)
+- Use <em>text</em> or <i>text</i> for italics (NEVER use *text* or _text_)
+- All formatting must be valid HTML, no markdown
+
+**CRITICAL: PRESERVE ALL SPECIAL ELEMENTS**
 - Keep ALL <figure> tags with their exact styling and classes
 - Keep ALL <img> tags with their src URLs unchanged
 - Keep ALL <div> wrappers around images
-- Do NOT remove, modify, or relocate any images
-- Images should stay in their original positions in the content
+- Keep ALL <table>, <thead>, <tbody>, <tr>, <td>, <th> tags with all attributes and classes
+- Keep ALL <iframe>, <script>, <embed> tags (widgets, embeds, calculators, forms)
+- Keep ALL custom Webflow elements (w-richtext-, w-embed-, w-widget-, etc.)
+- Keep ALL data attributes (data-*, w-*, webflow-*)
+- Do NOT remove, modify, or relocate any images, tables, widgets, or embeds
+- All special elements should stay in their original positions in the content
 
 **SALESROBOT SPECIFIC UPDATES - MUST APPLY:**
 1. User count: Always use "4200+" users (not 4000, 3000, etc.)
@@ -43,12 +52,12 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 1. Fix factual errors found by research: Update pricing accurately, correct feature descriptions, fix stats
 2. Add missing AI features (HIGH PRIORITY): AI Voice Clone, AI Appointment Setter, SalesGPT, Smart Reply Detection, AI Comment Automation
 3. Fix grammar: Remove em-dashes, eliminate banned words, shorten 30+ word sentences, add contractions, use active voice
-4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links, preserve ALL <figure> and <img> tags
+4. Preserve structure: Keep original HTML formatting, maintain headings/lists, keep images/links/tables/widgets, preserve ALL <figure>, <img>, <table>, <iframe>, <script>, and <embed> tags with all their attributes
 5. Add TL;DR if missing at the very start: 3-4 sentences covering main points
 
-**CRITICAL: Return the COMPLETE HTML content including ALL images. Do not truncate or summarize. Return every single paragraph, heading, image, and section from the original with your edits applied.**
+**CRITICAL: Return the COMPLETE HTML content including ALL images, tables, widgets, and embeds. Do not truncate or summarize. Return every single paragraph, heading, image, table, widget, and section from the original with your edits applied. Use only HTML tags, never markdown syntax.**
 
-Return only the complete rewritten HTML content with all images preserved.`;
+Return only the complete rewritten HTML content with all images, tables, and widgets preserved.`;
 
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
@@ -206,6 +215,32 @@ function VisualEditor({ content, onChange }) {
           margin: 1.5rem 0 0.75rem 0;
           color: #1e293b;
         }
+        .ql-editor table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1.5rem 0;
+          border: 1px solid #e5e7eb;
+        }
+        .ql-editor th {
+          background-color: #f3f4f6;
+          font-weight: 600;
+          text-align: left;
+          padding: 0.75rem;
+          border: 1px solid #e5e7eb;
+        }
+        .ql-editor td {
+          padding: 0.75rem;
+          border: 1px solid #e5e7eb;
+        }
+        .ql-editor tbody tr:nth-child(even) {
+          background-color: #f9fafb;
+        }
+        .ql-editor iframe, .ql-editor embed {
+          max-width: 100%;
+          margin: 1.5rem 0;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+        }
       `}</style>
       <div ref={editorRef} style={{ minHeight: '600px' }} />
     </div>
@@ -225,6 +260,8 @@ export default function ContentOps() {
   const [editMode, setEditMode] = useState('visual');
   const [editedContent, setEditedContent] = useState('');
   const [highlightedData, setHighlightedData] = useState(null);
+  const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
+  const [showHighlights, setShowHighlights] = useState(true);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -242,6 +279,29 @@ export default function ContentOps() {
       setHighlightedData(highlighted);
     }
   }, [editedContent, result]);
+
+  const handleImageClick = (e) => {
+    if (e.target.tagName === 'IMG') {
+      const src = e.target.src;
+      const alt = e.target.alt || '';
+      const allImages = editedContent.match(/<img[^>]*>/g) || [];
+      const imgIndex = Array.from(e.currentTarget.querySelectorAll('img')).indexOf(e.target);
+      setImageAltModal({ show: true, src, currentAlt: alt, index: imgIndex });
+    }
+  };
+
+  const updateImageAlt = () => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(editedContent, 'text/html');
+    const images = doc.querySelectorAll('img');
+    
+    if (images[imageAltModal.index]) {
+      images[imageAltModal.index].setAttribute('alt', imageAltModal.currentAlt);
+      setEditedContent(doc.body.innerHTML);
+    }
+    
+    setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
+  };
 
   const saveConfig = () => {
     if (!config.anthropicKey || !config.braveKey || !config.webflowKey || !config.collectionId) {
@@ -288,10 +348,21 @@ export default function ContentOps() {
     // Count images in original content
     const originalImageCount = (fullOriginalContent.match(/<img/g) || []).length;
     const originalFigureCount = (fullOriginalContent.match(/<figure/g) || []).length;
+    const originalTableCount = (fullOriginalContent.match(/<table/g) || []).length;
+    const originalIframeCount = (fullOriginalContent.match(/<iframe/g) || []).length;
+    const originalEmbedCount = (fullOriginalContent.match(/<embed/g) || []).length;
+    const originalScriptCount = (fullOriginalContent.match(/<script/g) || []).length;
+    const originalWidgetCount = (fullOriginalContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length +
+                                 (fullOriginalContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length;
     
     console.log('📝 Post body length:', originalCharCount);
     console.log('🖼️ Original images found:', originalImageCount);
     console.log('🖼️ Original figures found:', originalFigureCount);
+    console.log('📊 Original tables found:', originalTableCount);
+    console.log('🎬 Original iframes found:', originalIframeCount);
+    console.log('📦 Original embeds found:', originalEmbedCount);
+    console.log('🔌 Original widgets found:', originalWidgetCount);
+    console.log('⚙️ Original scripts found:', originalScriptCount);
     console.log('🖼️ Looking for image fields...');
     Object.keys(blog.fieldData).forEach(key => {
       if (key.toLowerCase().includes('image') || key.toLowerCase().includes('photo') || key.toLowerCase().includes('picture')) {
@@ -332,23 +403,57 @@ export default function ContentOps() {
       const data = await response.json();
       let updatedContent = data.content || fullOriginalContent;
       
+      // Fix markdown-style bold to HTML bold tags
+      updatedContent = updatedContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      
       const returnedCharCount = updatedContent.length;
       const truncationThreshold = 0.7;
       
       // Check if images survived the backend processing
       const returnedImageCount = (updatedContent.match(/<img/g) || []).length;
       const returnedFigureCount = (updatedContent.match(/<figure/g) || []).length;
+      const returnedTableCount = (updatedContent.match(/<table/g) || []).length;
+      const returnedIframeCount = (updatedContent.match(/<iframe/g) || []).length;
+      const returnedEmbedCount = (updatedContent.match(/<embed/g) || []).length;
+      const returnedScriptCount = (updatedContent.match(/<script/g) || []).length;
+      const returnedWidgetCount = (updatedContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length +
+                                   (updatedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length;
       
       console.log('🔍 Backend response check:');
       console.log('   Original images:', originalImageCount, '| Returned images:', returnedImageCount);
       console.log('   Original figures:', originalFigureCount, '| Returned figures:', returnedFigureCount);
+      console.log('   Original tables:', originalTableCount, '| Returned tables:', returnedTableCount);
+      console.log('   Original iframes:', originalIframeCount, '| Returned iframes:', returnedIframeCount);
+      console.log('   Original embeds:', originalEmbedCount, '| Returned embeds:', returnedEmbedCount);
+      console.log('   Original widgets:', originalWidgetCount, '| Returned widgets:', returnedWidgetCount);
+      console.log('   Original scripts:', originalScriptCount, '| Returned scripts:', returnedScriptCount);
       console.log('   Original chars:', originalCharCount, '| Returned chars:', returnedCharCount);
       
+      let elementsLost = [];
       if (returnedImageCount < originalImageCount) {
-        console.error(`❌ IMAGE LOSS! Backend lost ${originalImageCount - returnedImageCount} images!`);
+        elementsLost.push(`${originalImageCount - returnedImageCount} images`);
+      }
+      if (returnedTableCount < originalTableCount) {
+        elementsLost.push(`${originalTableCount - returnedTableCount} tables`);
+      }
+      if (returnedIframeCount < originalIframeCount) {
+        elementsLost.push(`${originalIframeCount - returnedIframeCount} iframes`);
+      }
+      if (returnedEmbedCount < originalEmbedCount) {
+        elementsLost.push(`${originalEmbedCount - returnedEmbedCount} embeds`);
+      }
+      if (returnedWidgetCount < originalWidgetCount) {
+        elementsLost.push(`${originalWidgetCount - returnedWidgetCount} widgets`);
+      }
+      if (returnedScriptCount < originalScriptCount) {
+        elementsLost.push(`${originalScriptCount - returnedScriptCount} scripts`);
+      }
+      
+      if (elementsLost.length > 0) {
+        console.error(`❌ ELEMENT LOSS! Backend lost: ${elementsLost.join(', ')}`);
         setStatus({ 
           type: 'error', 
-          message: `⚠️ Backend lost ${originalImageCount - returnedImageCount} images. Using original content.` 
+          message: `⚠️ Backend lost ${elementsLost.join(', ')}. Using original content.` 
         });
         updatedContent = fullOriginalContent;
       }
@@ -594,15 +699,32 @@ export default function ContentOps() {
             
             {/* Image count indicator */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-2">
-                <span className="text-blue-700 font-semibold">🖼️ Images:</span>
-                <span className="text-blue-900">
-                  {(editedContent.match(/<img/g) || []).length} images found in content
-                </span>
-                {(editedContent.match(/<img/g) || []).length === 0 && (
-                  <span className="text-orange-600 ml-2">⚠️ No images detected</span>
-                )}
+              <div className="text-blue-700 font-semibold mb-2">📊 Content Elements Detected:</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-700">🖼️ Images:</span>
+                  <span className="text-blue-900 font-semibold">{(editedContent.match(/<img/g) || []).length}</span>
+                  {(editedContent.match(/<img/g) || []).length === 0 && <span className="text-orange-600">⚠️</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-700">📊 Tables:</span>
+                  <span className="text-blue-900 font-semibold">{(editedContent.match(/<table/g) || []).length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-700">🎬 Embeds:</span>
+                  <span className="text-blue-900 font-semibold">
+                    {(editedContent.match(/<iframe/g) || []).length + (editedContent.match(/<embed/g) || []).length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-700">🔌 Widgets:</span>
+                  <span className="text-blue-900 font-semibold">
+                    {(editedContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length + 
+                     (editedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length}
+                  </span>
+                </div>
               </div>
+              <p className="text-xs text-blue-600 mt-2">✅ All elements preserved with original attributes and styling</p>
             </div>
 
             <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-lg">
@@ -667,7 +789,7 @@ export default function ContentOps() {
                   ) : (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly • Live preview shows images and formatting • Scroll down in the code editor to see all content including images</p>
+                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML directly • Live preview shows images and formatting • <span className="font-semibold">Click any image in preview to add/edit alt text</span></p>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {/* HTML Code Editor */}
@@ -695,6 +817,41 @@ export default function ContentOps() {
                               max-width: 100%;
                               height: auto;
                               display: block;
+                              margin: 1rem 0;
+                              cursor: pointer;
+                              transition: all 0.2s;
+                            }
+                            .html-preview img:hover {
+                              outline: 2px solid #0ea5e9;
+                              outline-offset: 2px;
+                            }
+                            .html-preview table {
+                              width: 100%;
+                              border-collapse: collapse;
+                              margin: 1.5rem 0;
+                              border: 1px solid #e5e7eb;
+                            }
+                            .html-preview th {
+                              background-color: #f3f4f6;
+                              font-weight: 600;
+                              text-align: left;
+                              padding: 0.75rem;
+                              border: 1px solid #e5e7eb;
+                            }
+                            .html-preview td {
+                              padding: 0.75rem;
+                              border: 1px solid #e5e7eb;
+                            }
+                            .html-preview tbody tr:nth-child(even) {
+                              background-color: #f9fafb;
+                            }
+                            .html-preview iframe, .html-preview embed {
+                              max-width: 100%;
+                              margin: 1.5rem 0;
+                              border: 1px solid #e5e7eb;
+                              border-radius: 0.5rem;
+                            }
+                            .html-preview .w-embed, .html-preview [class*="w-"], .html-preview [data-w-id] {
                               margin: 1rem 0;
                             }
                             .html-preview figure {
@@ -768,6 +925,7 @@ export default function ContentOps() {
                           `}</style>
                           <div 
                             className="html-preview text-gray-800 overflow-y-auto p-4"
+                            onClick={handleImageClick}
                             style={{ 
                               fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                               height: '800px',
@@ -784,8 +942,16 @@ export default function ContentOps() {
 
               {viewMode === 'changes' && (
                 <div className="space-y-6">
-                  <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-blue-800 text-sm">✨ Full blog comparison • {highlightedData?.changesCount || 0} sections highlighted in blue</p>
+                  <div className="flex items-center justify-between">
+                    <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-blue-800 text-sm">✨ Full blog comparison • {highlightedData?.changesCount || 0} sections highlighted in blue</p>
+                    </div>
+                    <button
+                      onClick={() => setShowHighlights(!showHighlights)}
+                      className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      {showHighlights ? '👁️ Hide Highlights' : '✨ Show Highlights'}
+                    </button>
                   </div>
                   
                   <style>{`
@@ -808,6 +974,35 @@ export default function ContentOps() {
                     }
                     .blog-content .w-richtext-figure-type-image {
                       max-width: 100% !important;
+                    }
+                    .blog-content table {
+                      width: 100%;
+                      border-collapse: collapse;
+                      margin: 1.5rem 0;
+                      border: 1px solid #e5e7eb;
+                    }
+                    .blog-content th {
+                      background-color: #f3f4f6;
+                      font-weight: 600;
+                      text-align: left;
+                      padding: 0.75rem;
+                      border: 1px solid #e5e7eb;
+                    }
+                    .blog-content td {
+                      padding: 0.75rem;
+                      border: 1px solid #e5e7eb;
+                    }
+                    .blog-content tbody tr:nth-child(even) {
+                      background-color: #f9fafb;
+                    }
+                    .blog-content iframe, .blog-content embed {
+                      max-width: 100%;
+                      margin: 1.5rem 0;
+                      border: 1px solid #e5e7eb;
+                      border-radius: 0.5rem;
+                    }
+                    .blog-content .w-embed, .blog-content [class*="w-"], .blog-content [data-w-id] {
+                      margin: 1rem 0;
                     }
                     .blog-content p {
                       margin: 0.75rem 0;
@@ -883,8 +1078,8 @@ export default function ContentOps() {
 
                     {/* AFTER with highlights */}
                     <div className="bg-white rounded-xl p-6 border border-[#0ea5e9]">
-                      <div className="text-[#0ea5e9] text-sm font-bold mb-4 uppercase tracking-wide sticky top-0 bg-white py-2">
-                        ✅ AFTER (Updated - Changes Highlighted)
+                      <div className="text-[#0ea5e9] text-sm font-bold mb-4 uppercase tracking-wide sticky top-0 bg-white py-2 flex items-center justify-between">
+                        <span>✅ AFTER (Updated{showHighlights ? ' - Changes Highlighted' : ''})</span>
                       </div>
                       <div 
                         className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
@@ -892,7 +1087,7 @@ export default function ContentOps() {
                           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                           maxHeight: '800px'
                         }}
-                        dangerouslySetInnerHTML={{ __html: highlightedData?.html || editedContent }}
+                        dangerouslySetInnerHTML={{ __html: showHighlights ? (highlightedData?.html || editedContent) : editedContent }}
                       />
                     </div>
                   </div>
@@ -927,6 +1122,46 @@ export default function ContentOps() {
           </div>
         )}
       </div>
+
+      {/* Image Alt Text Modal */}
+      {imageAltModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 })}>
+          <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-[#0f172a] mb-4">Edit Image Alt Text</h3>
+            
+            <div className="mb-4">
+              <img src={imageAltModal.src} alt={imageAltModal.currentAlt} className="max-w-full h-auto rounded-lg border border-gray-200 mb-4" style={{ maxHeight: '300px' }} />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Alt Text (for accessibility & SEO)</label>
+              <textarea
+                value={imageAltModal.currentAlt}
+                onChange={(e) => setImageAltModal({ ...imageAltModal, currentAlt: e.target.value })}
+                placeholder="Describe this image for screen readers and SEO..."
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent resize-none"
+                rows="3"
+              />
+              <p className="text-xs text-gray-500 mt-1">Good alt text: "Screenshot of SalesRobot dashboard showing campaign analytics"</p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 })}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={updateImageAlt}
+                className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
+              >
+                Save Alt Text
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="bg-[#0f172a] border-t border-gray-800 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-gray-400 text-sm">
