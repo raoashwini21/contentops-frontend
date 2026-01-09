@@ -328,6 +328,7 @@ export default function ContentOps() {
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
   const isUserEditingRef = useRef(false); // Flag to prevent sync conflicts
+  const isSyncingRef = useRef(false); // Flag to prevent sync loops
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -370,12 +371,25 @@ export default function ContentOps() {
       return;
     }
     
+    // Don't sync if already syncing - prevents loops
+    if (isSyncingRef.current) {
+      console.log('⏸️ Skipping sync - already syncing');
+      return;
+    }
+    
     if (afterViewRef.current && viewMode === 'changes') {
       const contentToShow = showHighlights ? (highlightedData?.html || editedContent) : editedContent;
       
-      // Only update if content actually changed to avoid cursor jumps
-      if (afterViewRef.current.innerHTML !== contentToShow) {
+      // Normalize both for comparison (remove extra whitespace, etc)
+      const currentContent = afterViewRef.current.innerHTML.trim().replace(/\s+/g, ' ');
+      const newContent = contentToShow.trim().replace(/\s+/g, ' ');
+      
+      // Only update if content actually changed to avoid cursor jumps and loops
+      if (currentContent !== newContent) {
         console.log('🔄 Syncing content to view');
+        
+        // Set syncing flag
+        isSyncingRef.current = true;
         
         // Save cursor position before update
         const selection = window.getSelection();
@@ -397,6 +411,11 @@ export default function ContentOps() {
             // Cursor restoration failed, that's okay
           }
         }
+        
+        // Clear syncing flag after a delay
+        setTimeout(() => {
+          isSyncingRef.current = false;
+        }, 100);
       }
     }
   }, [editedContent, viewMode, showHighlights, highlightedData]);
@@ -408,6 +427,12 @@ export default function ContentOps() {
   };
 
   const handleAfterViewInput = () => {
+    // Don't update if we're syncing from the useEffect
+    if (isSyncingRef.current) {
+      console.log('⏸️ Skipping input handler - syncing in progress');
+      return;
+    }
+    
     if (afterViewRef.current) {
       // Mark that user is editing to prevent sync conflicts
       isUserEditingRef.current = true;
