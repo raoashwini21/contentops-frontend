@@ -75,15 +75,12 @@ Return only the complete rewritten HTML content with all images, tables, and wid
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  // Create a more precise regex that handles widget boundaries properly
-  // Match complete elements with their full content, but be more careful with divs
   const splitIntoBlocks = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
     const container = doc.body.firstChild;
     const blocks = [];
     
-    // Process each direct child as a separate block
     Array.from(container.childNodes).forEach(node => {
       if (node.nodeType === Node.ELEMENT_NODE) {
         blocks.push(node.outerHTML);
@@ -98,7 +95,6 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const originalBlocks = splitIntoBlocks(originalHTML);
   const updatedBlocks = splitIntoBlocks(updatedHTML);
   
-  // Create a map of original blocks for comparison
   const originalMap = new Map();
   originalBlocks.forEach((block, idx) => {
     const cleaned = stripHTML(block);
@@ -114,7 +110,6 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
     
-    // Check if this block should be excluded from highlighting
     const isSpecialElement = 
       updatedBlock.match(/<(table|iframe|embed|script|img|figure)/i) ||
       updatedBlock.match(/class="[^"]*widget[^"]*"/i) ||
@@ -122,17 +117,11 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
       updatedBlock.match(/class="[^"]*info-widget[^"]*"/i) ||
       updatedBlock.match(/data-w-id/i);
     
-    // Only highlight if:
-    // 1. Block has substantial text (more than 20 chars)
-    // 2. Block doesn't exist in original
-    // 3. Block is not a special element
     if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
-      // Wrap in a highlight div that doesn't interfere with content structure
       const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
       highlightedHTML += highlighted;
       changesCount++;
     } else {
-      // Keep the block as-is - this is critical for widgets
       highlightedHTML += updatedBlock;
     }
   });
@@ -165,7 +154,6 @@ function VisualEditor({ content, onChange }) {
 
     const Quill = window.Quill;
     
-    // Register image formats to preserve src and alt attributes
     const BlockEmbed = Quill.import('blots/block/embed');
     class ImageBlot extends BlockEmbed {
       static create(value) {
@@ -202,7 +190,6 @@ function VisualEditor({ content, onChange }) {
       }
     });
 
-    // Set initial content
     const delta = quillRef.current.clipboard.convert(content);
     quillRef.current.setContents(delta, 'silent');
 
@@ -221,7 +208,7 @@ function VisualEditor({ content, onChange }) {
         try {
           quillRef.current.setSelection(cursorPosition);
         } catch (e) {
-          // Ignore cursor position errors
+          // Ignore
         }
       }
     }
@@ -324,15 +311,13 @@ export default function ContentOps() {
   const [editedContent, setEditedContent] = useState('');
   const [highlightedData, setHighlightedData] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
-  const [showHighlights, setShowHighlights] = useState(true); // Show highlights by default
+  const [showHighlights, setShowHighlights] = useState(true);
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
-  const isUserEditingRef = useRef(false); // Flag to prevent sync conflicts
-  const isSyncingRef = useRef(false); // Flag to prevent sync loops
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
-  const [editingLink, setEditingLink] = useState(null); // Store link element being edited
+  const [editingLink, setEditingLink] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [savedSelection, setSavedSelection] = useState(null);
@@ -346,79 +331,27 @@ export default function ContentOps() {
     }
   }, []);
 
-  // Update highlighted diff whenever edited content changes
   useEffect(() => {
     if (result && editedContent && result.originalContent) {
       const highlighted = createHighlightedHTML(result.originalContent, editedContent);
-      console.log('🎨 Highlighting created:', highlighted.changesCount, 'changes found');
       setHighlightedData(highlighted);
     }
   }, [editedContent, result]);
 
-  // Sync content to editable preview div
   useEffect(() => {
     if (editablePreviewRef.current && editMode === 'html') {
       editablePreviewRef.current.innerHTML = editedContent;
     }
   }, [editedContent, editMode]);
 
-  // Sync content to After view when highlights toggle or content changes
   useEffect(() => {
-    // Don't sync if user is actively editing - prevents conflicts
-    if (isUserEditingRef.current) {
-      console.log('⏸️ Skipping sync - user is editing');
-      isUserEditingRef.current = false;
-      return;
-    }
-    
-    // Don't sync if already syncing - prevents loops
-    if (isSyncingRef.current) {
-      console.log('⏸️ Skipping sync - already syncing');
-      return;
-    }
-    
     if (afterViewRef.current && viewMode === 'changes') {
-      const contentToShow = showHighlights ? (highlightedData?.html || editedContent) : editedContent;
-      
-      // Normalize both for comparison (remove extra whitespace, etc)
-      const currentContent = afterViewRef.current.innerHTML.trim().replace(/\s+/g, ' ');
-      const newContent = contentToShow.trim().replace(/\s+/g, ' ');
-      
-      // Only update if content actually changed to avoid cursor jumps and loops
-      if (currentContent !== newContent) {
-        console.log('🔄 Syncing content to view');
-        
-        // Set syncing flag
-        isSyncingRef.current = true;
-        
-        // Save cursor position before update
-        const selection = window.getSelection();
-        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-        const startOffset = range?.startOffset;
-        const startContainer = range?.startContainer;
-        
-        afterViewRef.current.innerHTML = contentToShow;
-        
-        // Try to restore cursor position
-        if (startContainer && startOffset !== undefined) {
-          try {
-            const newRange = document.createRange();
-            newRange.setStart(startContainer, Math.min(startOffset, startContainer.textContent?.length || 0));
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-          } catch (e) {
-            // Cursor restoration failed, that's okay
-          }
-        }
-        
-        // Clear syncing flag after a delay
-        setTimeout(() => {
-          isSyncingRef.current = false;
-        }, 100);
-      }
+      const contentToShow = showHighlights 
+        ? (highlightedData?.html || editedContent) 
+        : editedContent;
+      afterViewRef.current.innerHTML = contentToShow;
     }
-  }, [editedContent, viewMode, showHighlights, highlightedData]);
+  }, [viewMode, showHighlights, highlightedData]);
 
   const handleEditablePreviewInput = () => {
     if (editablePreviewRef.current) {
@@ -427,55 +360,22 @@ export default function ContentOps() {
   };
 
   const handleAfterViewInput = () => {
-    // Don't update if we're syncing from the useEffect
-    if (isSyncingRef.current) {
-      console.log('⏸️ Skipping input handler - syncing in progress');
-      return;
-    }
-    
-    if (afterViewRef.current) {
-      // Mark that user is editing to prevent sync conflicts
-      isUserEditingRef.current = true;
-      
-      // Get the raw HTML
-      const rawHTML = afterViewRef.current.innerHTML;
-      
-      // Only remove highlight wrapper divs, preserve all other HTML
-      // Use a more specific regex that only targets our highlight divs
-      const cleanedHTML = rawHTML.replace(
-        /<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">(.*?)<\/div>/gs, 
-        '$1'
-      );
-      
-      console.log('💾 Content updated by user');
-      setEditedContent(cleanedHTML);
-      
-      // Reset the flag after a short delay
-      setTimeout(() => {
-        isUserEditingRef.current = false;
-      }, 100);
-    }
+    if (!afterViewRef.current) return;
+    const rawHTML = afterViewRef.current.innerHTML;
+    const cleanedHTML = rawHTML.replace(
+      /<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">(.*?)<\/div>/gs,
+      '$1'
+    );
+    setEditedContent(cleanedHTML);
   };
 
-  // Save current selection for link/image insertion
   const saveSelection = () => {
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
       setSavedSelection(selection.getRangeAt(0).cloneRange());
-      console.log('💾 Selection saved for later use');
     }
   };
 
-  // Restore saved selection
-  const restoreSelection = () => {
-    if (savedSelection) {
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(savedSelection);
-    }
-  };
-
-  // Format text (bold, italic) - With toggle support
   const formatText = (command) => {
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
@@ -483,111 +383,69 @@ export default function ContentOps() {
     const range = selection.getRangeAt(0);
     const selectedText = range.toString();
     
-    if (!selectedText) {
-      alert('Please select text first');
-      return;
-    }
+    if (!selectedText) return;
     
-    // Check if already formatted - if so, remove formatting
     const parentElement = range.commonAncestorContainer.parentElement;
     const tag = command === 'bold' ? 'STRONG' : 'EM';
     
-    // Check if selection is inside the formatting tag
     let formattedParent = parentElement;
     while (formattedParent && formattedParent !== afterViewRef.current) {
       if (formattedParent.tagName === tag || 
           (command === 'bold' && formattedParent.tagName === 'B') ||
           (command === 'italic' && formattedParent.tagName === 'I')) {
-        // Already formatted - remove the tag
         const text = formattedParent.textContent;
         const textNode = document.createTextNode(text);
         formattedParent.parentNode.replaceChild(textNode, formattedParent);
-        console.log(`✏️ Removed ${command} formatting`);
         
-        // Save changes
-        setTimeout(() => {
-          if (afterViewRef.current) {
-            setEditedContent(afterViewRef.current.innerHTML);
-            console.log('💾 Saved unformatted content');
-          }
-        }, 50);
+        if (afterViewRef.current) {
+          setEditedContent(afterViewRef.current.innerHTML);
+        }
         return;
       }
       formattedParent = formattedParent.parentElement;
     }
     
-    // Not formatted - add formatting
     const element = document.createElement(command === 'bold' ? 'strong' : 'em');
     element.textContent = selectedText;
     
-    // Replace the selected text with formatted version
     range.deleteContents();
     range.insertNode(element);
     
-    // Move cursor after the inserted element
     range.setStartAfter(element);
     range.setEndAfter(element);
     selection.removeAllRanges();
     selection.addRange(range);
     
-    console.log(`✏️ Applied ${command} formatting`);
-    
-    // Save changes
-    setTimeout(() => {
-      if (afterViewRef.current) {
-        setEditedContent(afterViewRef.current.innerHTML);
-        console.log('💾 Saved formatted content');
-      }
-    }, 50);
+    if (afterViewRef.current) {
+      setEditedContent(afterViewRef.current.innerHTML);
+    }
   };
 
-  // Format as heading
   const formatHeading = (level) => {
-    // Focus first
-    afterViewRef.current?.focus();
-    
-    // Mark as user editing
-    isUserEditingRef.current = true;
-    
-    // Apply the heading format
-    const success = document.execCommand('formatBlock', false, `<h${level}>`);
-    console.log(`✏️ Applied H${level} heading:`, success ? 'success' : 'failed');
-    
-    // Force update after a short delay
-    setTimeout(() => {
-      if (afterViewRef.current) {
-        const currentHTML = afterViewRef.current.innerHTML;
-        console.log('💾 Saving heading content');
-        setEditedContent(currentHTML);
-      }
-      isUserEditingRef.current = false;
-    }, 50);
+    if (!afterViewRef.current) return;
+    afterViewRef.current.focus();
+    document.execCommand('formatBlock', false, `<h${level}>`);
+    setEditedContent(afterViewRef.current.innerHTML);
   };
 
-  // Insert link or edit existing link
   const insertLink = () => {
     const selection = window.getSelection();
     
-    // Check if clicked on a link
     if (selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
       let element = range.commonAncestorContainer;
       
-      // Walk up the tree to find if we're inside a link
       while (element && element !== afterViewRef.current) {
         if (element.tagName === 'A') {
-          // Editing existing link
           setEditingLink(element);
           setLinkUrl(element.href);
           setShowLinkModal(true);
-          console.log('✏️ Editing existing link:', element.href);
           return;
         }
         element = element.parentElement;
       }
     }
     
-    // Creating new link
     saveSelection();
     setEditingLink(null);
     setLinkUrl('');
@@ -595,99 +453,55 @@ export default function ContentOps() {
   };
 
   const applyLink = () => {
-    if (!linkUrl) {
-      alert('Please enter a URL');
-      return;
-    }
-    
-    // Mark as user editing
-    isUserEditingRef.current = true;
+    if (!linkUrl) return;
     
     if (editingLink) {
-      // Editing existing link
       editingLink.href = linkUrl;
       editingLink.target = '_blank';
       editingLink.rel = 'noopener noreferrer';
-      console.log('🔗 Link updated:', linkUrl);
     } else {
-      // Creating new link - USE SAVED SELECTION!
       if (savedSelection) {
-        // Restore the saved selection
         const selection = window.getSelection();
         selection.removeAllRanges();
-        selection.addRange(savedSelection);
+        selection.addRange(savedSelection.cloneRange());
         
         const selectedText = selection.toString();
-        
-        // Create link element
         const link = document.createElement('a');
         link.href = linkUrl;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.style.color = '#0ea5e9';
         link.style.textDecoration = 'underline';
+        link.textContent = selectedText || linkUrl;
         
         if (selectedText) {
-          // Use selected text as link text
-          link.textContent = selectedText;
-          
-          // Replace selection with link
           savedSelection.deleteContents();
-          savedSelection.insertNode(link);
-          savedSelection.setStartAfter(link);
-          savedSelection.collapse(true);
-          
-          console.log('🔗 Link created at saved position:', linkUrl);
-        } else {
-          // No text selected, insert link with URL as text
-          link.textContent = linkUrl;
-          savedSelection.insertNode(link);
-          savedSelection.setStartAfter(link);
-          savedSelection.collapse(true);
-          
-          console.log('🔗 Link inserted at saved position:', linkUrl);
         }
-      } else {
-        alert('No cursor position saved. Please click in the editor first.');
-        return;
+        savedSelection.insertNode(link);
+        savedSelection.setStartAfter(link);
+        savedSelection.collapse(true);
       }
     }
     
-    // Focus back on the editor
-    afterViewRef.current?.focus();
+    if (afterViewRef.current) {
+      setEditedContent(afterViewRef.current.innerHTML);
+    }
     
-    // Force update after a short delay
-    setTimeout(() => {
-      if (afterViewRef.current) {
-        const currentHTML = afterViewRef.current.innerHTML;
-        console.log('💾 Saving linked content');
-        setEditedContent(currentHTML);
-      }
-      isUserEditingRef.current = false;
-    }, 50);
-    
-    // Close modal and reset
     setShowLinkModal(false);
     setLinkUrl('');
     setEditingLink(null);
   };
 
-  // Insert image
   const insertImage = () => {
-    saveSelection(); // CRITICAL: Save cursor position BEFORE modal opens!
+    saveSelection();
     setShowImageModal(true);
   };
 
   const applyImage = async () => {
-    // Mark as user editing
-    isUserEditingRef.current = true;
-    
     let imageSrc = '';
     
-    // Handle file upload
     if (imageFile) {
       try {
-        // Convert file to base64
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -695,16 +509,13 @@ export default function ContentOps() {
           reader.readAsDataURL(imageFile);
         });
         imageSrc = base64;
-        console.log('🖼️ Image converted to base64');
       } catch (error) {
         console.error('Error reading image file:', error);
-        alert('Failed to read image file');
         return;
       }
     } else if (imageUrl) {
       imageSrc = imageUrl;
     } else {
-      alert('Please select an image file or enter a URL');
       return;
     }
     
@@ -716,36 +527,21 @@ export default function ContentOps() {
     img.style.margin = '1rem 0';
     img.alt = 'Inserted image';
 
-    // USE SAVED SELECTION (not current selection!)
     if (savedSelection) {
-      // Restore the saved selection
       const selection = window.getSelection();
       selection.removeAllRanges();
-      selection.addRange(savedSelection);
+      selection.addRange(savedSelection.cloneRange());
       
-      // Insert image at saved position
       savedSelection.insertNode(img);
-      
-      // Move cursor after image
       savedSelection.setStartAfter(img);
       savedSelection.collapse(true);
-      
-      console.log('🖼️ Image inserted at saved position');
-    } else {
-      // Fallback: append to end if no saved selection
-      afterViewRef.current?.appendChild(img);
-      console.log('🖼️ Image appended to end (no saved position)');
+    } else if (afterViewRef.current) {
+      afterViewRef.current.appendChild(img);
     }
     
-    // Force update after a short delay
-    setTimeout(() => {
-      if (afterViewRef.current) {
-        const currentHTML = afterViewRef.current.innerHTML;
-        console.log('💾 Saving content with new image');
-        setEditedContent(currentHTML);
-      }
-      isUserEditingRef.current = false;
-    }, 50);
+    if (afterViewRef.current) {
+      setEditedContent(afterViewRef.current.innerHTML);
+    }
     
     setShowImageModal(false);
     setImageUrl('');
@@ -753,29 +549,23 @@ export default function ContentOps() {
   };
 
   const handleContentClick = (e) => {
-    // Handle image clicks
     if (e.target.tagName === 'IMG') {
       const src = e.target.src;
       const alt = e.target.alt || '';
-      const allImages = editedContent.match(/<img[^>]*>/g) || [];
       const imgIndex = Array.from(e.currentTarget.querySelectorAll('img')).indexOf(e.target);
       setImageAltModal({ show: true, src, currentAlt: alt, index: imgIndex });
       return;
     }
     
-    // Handle link clicks - hold Ctrl/Cmd to follow link, regular click to edit
     if (e.target.tagName === 'A') {
       if (e.ctrlKey || e.metaKey) {
-        // Ctrl/Cmd + click = follow link
-        return; // Allow default behavior
+        return;
       }
       
-      // Regular click = edit link
       e.preventDefault();
       setEditingLink(e.target);
       setLinkUrl(e.target.href);
       setShowLinkModal(true);
-      console.log('✏️ Editing link:', e.target.href);
     }
   };
 
@@ -802,19 +592,20 @@ export default function ContentOps() {
     const images = doc.querySelectorAll('img');
     
     if (images[imageAltModal.index]) {
-      // Remove the image element
       const imageElement = images[imageAltModal.index];
-      
-      // Check if image is wrapped in a figure tag and remove the whole figure
       const figure = imageElement.closest('figure');
+      
       if (figure) {
         figure.remove();
       } else {
         imageElement.remove();
       }
       
-      setEditedContent(doc.body.innerHTML);
-      console.log('🗑️ Image deleted');
+      const newContent = doc.body.innerHTML;
+      setEditedContent(newContent);
+      if (afterViewRef.current) {
+        afterViewRef.current.innerHTML = newContent;
+      }
     }
     
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
@@ -855,49 +646,9 @@ export default function ContentOps() {
     setLoading(true);
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
     
-    // Debug: Log all available fields to find images
-    console.log('📊 Blog fieldData keys:', Object.keys(blog.fieldData));
-    console.log('📊 Full blog object:', blog);
-    
     const fullOriginalContent = blog.fieldData['post-body'] || '';
     const originalCharCount = fullOriginalContent.length;
-    
-    // Count images in original content
     const originalImageCount = (fullOriginalContent.match(/<img/g) || []).length;
-    const originalFigureCount = (fullOriginalContent.match(/<figure/g) || []).length;
-    const originalTableCount = (fullOriginalContent.match(/<table/g) || []).length;
-    const originalIframeCount = (fullOriginalContent.match(/<iframe/g) || []).length;
-    const originalEmbedCount = (fullOriginalContent.match(/<embed/g) || []).length;
-    const originalScriptCount = (fullOriginalContent.match(/<script/g) || []).length;
-    const originalWidgetCount = (fullOriginalContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length +
-                                 (fullOriginalContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length +
-                                 (fullOriginalContent.match(/class="[^"]*info-widget[^"]*"/g) || []).length;
-    
-    console.log('📝 Post body length:', originalCharCount);
-    console.log('🖼️ Original images found:', originalImageCount);
-    console.log('🖼️ Original figures found:', originalFigureCount);
-    console.log('📊 Original tables found:', originalTableCount);
-    console.log('🎬 Original iframes found:', originalIframeCount);
-    console.log('📦 Original embeds found:', originalEmbedCount);
-    console.log('🔌 Original widgets found:', originalWidgetCount);
-    console.log('⚙️ Original scripts found:', originalScriptCount);
-    console.log('🖼️ Looking for image fields...');
-    Object.keys(blog.fieldData).forEach(key => {
-      if (key.toLowerCase().includes('image') || key.toLowerCase().includes('photo') || key.toLowerCase().includes('picture')) {
-        console.log(`   Found potential image field: ${key}`, blog.fieldData[key]);
-      }
-    });
-    
-    if (originalImageCount > 0) {
-      console.log('✅ Images detected in original content!');
-      // Log first image src for verification
-      const imgMatch = fullOriginalContent.match(/<img[^>]+src="([^"]+)"/);
-      if (imgMatch) {
-        console.log('   First image URL:', imgMatch[1]);
-      }
-    } else {
-      console.warn('⚠️ No images found in post-body field!');
-    }
     
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
@@ -921,85 +672,21 @@ export default function ContentOps() {
       const data = await response.json();
       let updatedContent = data.content || fullOriginalContent;
       
-      // Fix markdown-style bold to HTML bold tags
       updatedContent = updatedContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       
-      // Check if content has been converted to plain text (common issue)
       const hasHTMLTags = updatedContent.match(/<[a-z][\s\S]*>/i);
       if (!hasHTMLTags && fullOriginalContent.match(/<[a-z][\s\S]*>/i)) {
-        console.error('❌ CRITICAL: Backend converted HTML to plain text!');
-        setStatus({ 
-          type: 'error', 
-          message: '⚠️ Backend stripped all HTML tags. Using original content.' 
-        });
+        console.error('❌ Backend converted HTML to plain text!');
         updatedContent = fullOriginalContent;
       }
       
       const returnedCharCount = updatedContent.length;
       const truncationThreshold = 0.7;
       
-      // Check if images survived the backend processing
-      const returnedImageCount = (updatedContent.match(/<img/g) || []).length;
-      const returnedFigureCount = (updatedContent.match(/<figure/g) || []).length;
-      const returnedTableCount = (updatedContent.match(/<table/g) || []).length;
-      const returnedIframeCount = (updatedContent.match(/<iframe/g) || []).length;
-      const returnedEmbedCount = (updatedContent.match(/<embed/g) || []).length;
-      const returnedScriptCount = (updatedContent.match(/<script/g) || []).length;
-      const returnedWidgetCount = (updatedContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length +
-                                   (updatedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length +
-                                   (updatedContent.match(/class="[^"]*info-widget[^"]*"/g) || []).length;
-      
-      console.log('🔍 Backend response check:');
-      console.log('   Original images:', originalImageCount, '| Returned images:', returnedImageCount);
-      console.log('   Original figures:', originalFigureCount, '| Returned figures:', returnedFigureCount);
-      console.log('   Original tables:', originalTableCount, '| Returned tables:', returnedTableCount);
-      console.log('   Original iframes:', originalIframeCount, '| Returned iframes:', returnedIframeCount);
-      console.log('   Original embeds:', originalEmbedCount, '| Returned embeds:', returnedEmbedCount);
-      console.log('   Original widgets:', originalWidgetCount, '| Returned widgets:', returnedWidgetCount);
-      console.log('   Original scripts:', originalScriptCount, '| Returned scripts:', returnedScriptCount);
-      console.log('   Original chars:', originalCharCount, '| Returned chars:', returnedCharCount);
-      
-      let elementsLost = [];
-      if (returnedImageCount < originalImageCount) {
-        elementsLost.push(`${originalImageCount - returnedImageCount} images`);
-      }
-      if (returnedTableCount < originalTableCount) {
-        elementsLost.push(`${originalTableCount - returnedTableCount} tables`);
-      }
-      if (returnedIframeCount < originalIframeCount) {
-        elementsLost.push(`${originalIframeCount - returnedIframeCount} iframes`);
-      }
-      if (returnedEmbedCount < originalEmbedCount) {
-        elementsLost.push(`${originalEmbedCount - returnedEmbedCount} embeds`);
-      }
-      if (returnedWidgetCount < originalWidgetCount) {
-        elementsLost.push(`${originalWidgetCount - returnedWidgetCount} widgets`);
-      }
-      if (returnedScriptCount < originalScriptCount) {
-        elementsLost.push(`${originalScriptCount - returnedScriptCount} scripts`);
-      }
-      
-      if (elementsLost.length > 0) {
-        console.error(`❌ ELEMENT LOSS! Backend lost: ${elementsLost.join(', ')}`);
-        setStatus({ 
-          type: 'error', 
-          message: `⚠️ Backend lost ${elementsLost.join(', ')}. Using original content.` 
-        });
-        updatedContent = fullOriginalContent;
-      }
-      
       if (returnedCharCount < originalCharCount * truncationThreshold) {
-        console.warn(`⚠️ Backend may have truncated content. Original: ${originalCharCount} chars, Returned: ${returnedCharCount} chars`);
-        setStatus({ 
-          type: 'error', 
-          message: `⚠️ Backend returned incomplete content (${Math.round(returnedCharCount/originalCharCount*100)}% of original). Using original content. Check backend token limits.` 
-        });
+        console.warn('⚠️ Backend may have truncated content');
         updatedContent = fullOriginalContent;
       }
-      
-      console.log('🔗 Link check:');
-      console.log('Original links:', (fullOriginalContent.match(/<a /g) || []).length);
-      console.log('Updated links:', (updatedContent.match(/<a /g) || []).length);
       
       const highlighted = createHighlightedHTML(fullOriginalContent, updatedContent);
       setHighlightedData(highlighted);
@@ -1059,7 +746,6 @@ export default function ContentOps() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* SalesRobot-style navbar */}
       <nav className="bg-[#0f172a] border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -1169,24 +855,6 @@ export default function ContentOps() {
                   <div key={blog.id} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-all group">
                     <h3 className="font-semibold text-[#0f172a] mb-2 line-clamp-2">{blog.fieldData.name}</h3>
                     <p className="text-sm text-gray-600 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
-                    
-                    {/* Debug: Show available fields */}
-                    <details className="mb-3 text-xs">
-                      <summary className="cursor-pointer text-gray-500 hover:text-gray-700">🔍 Debug: View fields</summary>
-                      <div className="mt-2 p-2 bg-gray-50 rounded text-gray-700 max-h-32 overflow-y-auto">
-                        {Object.keys(blog.fieldData).map(key => (
-                          <div key={key} className="flex gap-2">
-                            <span className="font-mono font-semibold">{key}:</span>
-                            <span className="truncate" title={String(blog.fieldData[key])}>
-                              {typeof blog.fieldData[key] === 'string' 
-                                ? blog.fieldData[key].substring(0, 50) + (blog.fieldData[key].length > 50 ? '...' : '')
-                                : JSON.stringify(blog.fieldData[key])}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                    
                     <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-[#0ea5e9] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7] disabled:opacity-50 shadow-sm">
                       {loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : '⚡ Smart Check'}
                     </button>
@@ -1225,56 +893,6 @@ export default function ContentOps() {
                 <div className="text-gray-600 text-sm">⚡ Speed</div>
                 <div className="text-[#0f172a] text-2xl font-bold">{(result.duration/1000).toFixed(1)}s</div>
               </div>
-            </div>
-            
-            {/* Element detection and warnings */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="text-blue-700 font-semibold mb-2">📊 Content Elements Detected:</div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-700">🖼️ Images:</span>
-                  <span className="text-blue-900 font-semibold">{(editedContent.match(/<img/g) || []).length}</span>
-                  {(editedContent.match(/<img/g) || []).length === 0 && (
-                    <span className="text-orange-600" title="No images detected">⚠️</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-700">📊 Tables:</span>
-                  <span className="text-blue-900 font-semibold">{(editedContent.match(/<table/g) || []).length}</span>
-                  {(editedContent.match(/<table/g) || []).length === 0 && result.originalContent.match(/<table/g) && (
-                    <span className="text-red-600" title="Tables were lost!">❌</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-700">🎬 Embeds:</span>
-                  <span className="text-blue-900 font-semibold">
-                    {(editedContent.match(/<iframe/g) || []).length + (editedContent.match(/<embed/g) || []).length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-700">🔌 Widgets:</span>
-                  <span className="text-blue-900 font-semibold">
-                    {(editedContent.match(/class="[^"]*w-embed[^"]*"/g) || []).length + 
-                     (editedContent.match(/class="[^"]*w-widget[^"]*"/g) || []).length +
-                     (editedContent.match(/class="[^"]*info-widget[^"]*"/g) || []).length}
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs text-blue-600 mt-2">✅ All elements preserved with original attributes and styling</p>
-              
-              {/* Warning if elements were lost */}
-              {((editedContent.match(/<table/g) || []).length < (result.originalContent.match(/<table/g) || []).length) && (
-                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-800 text-sm font-semibold">⚠️ Warning: Tables were lost during processing!</p>
-                  <p className="text-red-700 text-xs mt-1">Backend converted tables to text. Click below to restore original content.</p>
-                  <button
-                    onClick={() => setEditedContent(result.originalContent)}
-                    className="mt-2 px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700"
-                  >
-                    🔄 Restore Original Content with Tables
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-lg">
@@ -1339,10 +957,9 @@ export default function ContentOps() {
                   ) : (
                     <>
                       <div className="mb-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML (left) or click in the preview (right) to edit visually • <span className="font-semibold">Tables, widgets, and images render perfectly in preview!</span></p>
+                        <p className="text-blue-800 text-sm">✏️ HTML mode: Edit raw HTML (left) or click in the preview (right) to edit visually</p>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* HTML Code Editor */}
                         <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
                           <div className="bg-gray-800 px-4 py-2 border-b border-gray-700">
                             <span className="text-gray-300 text-xs font-semibold uppercase tracking-wide">HTML Source</span>
@@ -1356,7 +973,6 @@ export default function ContentOps() {
                           />
                         </div>
 
-                        {/* Live Preview - Now Editable! */}
                         <div className="bg-white rounded-lg border-2 border-green-400 overflow-hidden shadow-md">
                           <div className="bg-gradient-to-r from-green-50 to-blue-50 px-4 py-2 border-b border-green-200 flex items-center justify-between">
                             <span className="text-gray-700 text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
@@ -1398,119 +1014,24 @@ export default function ContentOps() {
                             .html-preview tbody tr:nth-child(even) {
                               background-color: #f9fafb;
                             }
-                            .html-preview td:hover, .html-preview th:hover {
-                              background-color: #e0f2fe;
-                              cursor: text;
-                            }
-                            .html-preview p:hover, .html-preview h1:hover, .html-preview h2:hover, .html-preview h3:hover {
-                              background-color: rgba(224, 242, 254, 0.3);
-                            }
-                            .html-preview iframe, .html-preview embed {
-                              max-width: 100%;
-                              margin: 1.5rem 0;
-                              border: 1px solid #e5e7eb;
-                              border-radius: 0.5rem;
-                            }
-                            .html-preview .w-embed, .html-preview [class*="w-"], .html-preview [data-w-id] {
-                              margin: 1rem 0;
-                            }
-                            .html-preview .info-widget {
-                              background-color: #fef3c7;
-                              border-left: 4px solid #f59e0b;
-                              padding: 1rem;
-                              margin: 1.5rem 0;
-                              border-radius: 0.5rem;
-                            }
-                            .html-preview .info-widget-heading {
-                              font-weight: 600;
-                              color: #92400e;
-                              margin-bottom: 0.5rem;
-                              font-size: 0.875rem;
-                              text-transform: uppercase;
-                              letter-spacing: 0.05em;
-                            }
-                            .html-preview .info-widget-content {
-                              color: #78350f;
-                              font-size: 0.875rem;
-                              line-height: 1.5;
-                            }
-                            .html-preview .widget-type {
-                              font-weight: 600;
-                              color: #92400e;
-                              font-size: 0.875rem;
-                              text-transform: uppercase;
-                            }
-                            .html-preview .hidden {
-                              display: block !important;
-                              visibility: visible !important;
-                            }
-                            .html-preview figure {
-                              margin: 1rem 0;
-                              max-width: 100% !important;
-                            }
-                            .html-preview figure > div {
-                              width: 100%;
-                            }
-                            .html-preview figure img {
-                              width: 100%;
-                              height: auto;
-                            }
-                            .html-preview .w-richtext-figure-type-image {
-                              max-width: 100% !important;
-                            }
                             .html-preview p {
                               margin: 0.75rem 0;
                               line-height: 1.6;
                             }
                             .html-preview h1 {
                               font-size: 2.25rem;
-                              line-height: 2.5rem;
                               font-weight: 700;
                               margin: 2rem 0 1rem 0;
-                              color: #0f172a;
                             }
                             .html-preview h2 {
                               font-size: 1.875rem;
-                              line-height: 2.25rem;
                               font-weight: 700;
                               margin: 1.75rem 0 1rem 0;
-                              color: #0f172a;
                             }
                             .html-preview h3 {
                               font-size: 1.5rem;
-                              line-height: 2rem;
                               font-weight: 600;
                               margin: 1.5rem 0 0.75rem 0;
-                              color: #1e293b;
-                            }
-                            .html-preview h4 {
-                              font-size: 1.25rem;
-                              line-height: 1.75rem;
-                              font-weight: 600;
-                              margin: 1.25rem 0 0.5rem 0;
-                              color: #1e293b;
-                            }
-                            .html-preview h5 {
-                              font-size: 1.125rem;
-                              line-height: 1.5rem;
-                              font-weight: 600;
-                              margin: 1rem 0 0.5rem 0;
-                              color: #334155;
-                            }
-                            .html-preview h6 {
-                              font-size: 1rem;
-                              line-height: 1.5rem;
-                              font-weight: 600;
-                              margin: 1rem 0 0.5rem 0;
-                              color: #334155;
-                            }
-                            .html-preview a {
-                              color: #0ea5e9;
-                              text-decoration: underline;
-                            }
-                            .html-preview ul, .html-preview ol {
-                              margin: 1rem 0;
-                              padding-left: 2rem;
                             }
                           `}</style>
                           <div 
@@ -1519,12 +1040,10 @@ export default function ContentOps() {
                             contentEditable={true}
                             suppressContentEditableWarning={true}
                             onInput={handleEditablePreviewInput}
-                            onBlur={handleEditablePreviewInput}
                             onClick={handleContentClick}
                             style={{ 
                               fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                               height: '800px',
-                              lineHeight: '1.6',
                               outline: 'none',
                               cursor: 'text'
                             }}
@@ -1542,8 +1061,8 @@ export default function ContentOps() {
                     <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-1 mr-3">
                       <p className="text-blue-800 text-sm">
                         ✨ <span className="font-semibold">Edit content directly!</span> Use toolbar to format (B, I, H1-H3, Link, Image) • 
-                        {showHighlights && <span className="text-blue-600"><span className="font-semibold">{highlightedData?.changesCount || 0} AI changes</span> highlighted in blue → Toggle off for clean view</span>}
-                        {!showHighlights && <span className="text-green-600">Clean view active → Toggle on to see AI changes</span>}
+                        {showHighlights && <span className="text-blue-600"><span className="font-semibold">{highlightedData?.changesCount || 0} AI changes</span> highlighted in blue</span>}
+                        {!showHighlights && <span className="text-green-600">Clean view active</span>}
                       </p>
                     </div>
                     <button
@@ -1573,24 +1092,6 @@ export default function ContentOps() {
                       outline-offset: 2px;
                       box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
                     }
-                    .blog-content img:focus {
-                      outline: 3px solid #0ea5e9;
-                      outline-offset: 2px;
-                    }
-                    .blog-content figure {
-                      margin: 1rem 0;
-                      max-width: 100% !important;
-                    }
-                    .blog-content figure > div {
-                      width: 100%;
-                    }
-                    .blog-content figure img {
-                      width: 100%;
-                      height: auto;
-                    }
-                    .blog-content .w-richtext-figure-type-image {
-                      max-width: 100% !important;
-                    }
                     .blog-content table {
                       width: 100%;
                       border-collapse: collapse;
@@ -1608,164 +1109,46 @@ export default function ContentOps() {
                       padding: 0.75rem;
                       border: 1px solid #e5e7eb;
                     }
-                    .blog-content tbody tr:nth-child(even) {
-                      background-color: #f9fafb;
-                    }
-                    .blog-content td:hover, .blog-content th:hover {
-                      background-color: #dbeafe !important;
-                      cursor: text;
-                      outline: 1px solid #3b82f6;
-                    }
-                    .blog-content p:hover, .blog-content h1:hover, .blog-content h2:hover, .blog-content h3:hover, .blog-content li:hover {
-                      background-color: rgba(219, 234, 254, 0.3);
-                      outline: 1px dashed #3b82f6;
-                      cursor: text;
-                    }
-                    .blog-content iframe, .blog-content embed {
-                      max-width: 100%;
-                      margin: 1.5rem 0;
-                      border: 1px solid #e5e7eb;
-                      border-radius: 0.5rem;
-                    }
-                    .blog-content .w-embed, .blog-content [class*="w-"], .blog-content [data-w-id] {
-                      margin: 1rem 0;
-                    }
-                    .blog-content .info-widget, .blog-content [class*="widget"] {
-                      margin: 1.5rem 0;
-                      padding: 1rem;
-                      border-left: 4px solid #8b5cf6;
-                      background: linear-gradient(to right, #f5f3ff 0%, #faf5ff 100%);
-                      border-radius: 4px;
-                      box-shadow: 0 1px 3px rgba(139, 92, 246, 0.1);
-                    }
-                    .blog-content .info-widget h4, .blog-content [class*="widget"] h4 {
-                      color: #7c3aed;
-                      margin-top: 0;
-                    }
-                    .blog-content .info-widget {
-                      background-color: #fef3c7;
-                      border-left: 4px solid #f59e0b;
-                      padding: 1rem;
-                      margin: 1.5rem 0;
-                      border-radius: 0.5rem;
-                    }
-                    .blog-content .info-widget-heading {
-                      font-weight: 600;
-                      color: #92400e;
-                      margin-bottom: 0.5rem;
-                      font-size: 0.875rem;
-                      text-transform: uppercase;
-                      letter-spacing: 0.05em;
-                    }
-                    .blog-content .info-widget-content {
-                      color: #78350f;
-                      font-size: 0.875rem;
-                      line-height: 1.5;
-                    }
-                    .blog-content .widget-type {
-                      font-weight: 600;
-                      color: #92400e;
-                      font-size: 0.875rem;
-                      text-transform: uppercase;
-                    }
-                    .blog-content .hidden {
-                      display: block !important;
-                      visibility: visible !important;
-                    }
                     .blog-content p {
                       margin: 0.75rem 0;
                       line-height: 1.6;
                     }
                     .blog-content h1 {
                       font-size: 2.25rem;
-                      line-height: 2.5rem;
                       font-weight: 700;
                       margin: 2rem 0 1rem 0;
-                      color: #0f172a;
                     }
                     .blog-content h2 {
                       font-size: 1.875rem;
-                      line-height: 2.25rem;
                       font-weight: 700;
                       margin: 1.75rem 0 1rem 0;
-                      color: #0f172a;
                     }
                     .blog-content h3 {
                       font-size: 1.5rem;
-                      line-height: 2rem;
                       font-weight: 600;
                       margin: 1.5rem 0 0.75rem 0;
-                      color: #1e293b;
-                    }
-                    .blog-content h4 {
-                      font-size: 1.25rem;
-                      line-height: 1.75rem;
-                      font-weight: 600;
-                      margin: 1.25rem 0 0.5rem 0;
-                      color: #1e293b;
-                    }
-                    .blog-content h5 {
-                      font-size: 1.125rem;
-                      line-height: 1.5rem;
-                      font-weight: 600;
-                      margin: 1rem 0 0.5rem 0;
-                      color: #334155;
-                    }
-                    .blog-content h6 {
-                      font-size: 1rem;
-                      line-height: 1.5rem;
-                      font-weight: 600;
-                      margin: 1rem 0 0.5rem 0;
-                      color: #334155;
-                    }
-                    .blog-content a {
-                      color: #0ea5e9;
-                      text-decoration: underline;
-                      cursor: pointer;
-                      transition: all 0.2s;
-                    }
-                    .blog-content a:hover {
-                      background-color: rgba(14, 165, 233, 0.1);
-                      padding: 2px 4px;
-                      margin: -2px -4px;
-                      border-radius: 3px;
-                      color: #0284c7;
-                    }
-                    .blog-content ul, .blog-content ol {
-                      margin: 1rem 0;
-                      padding-left: 2rem;
                     }
                   `}</style>
                   
-                  {/* Single Full-Width Editable Content Panel */}
                   <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
                     <div className="text-[#0ea5e9] text-sm font-bold mb-2 uppercase tracking-wide flex items-center justify-between">
                       <span>📝 EDITABLE CONTENT {showHighlights && '(Changes Highlighted)'}</span>
-                      <div className="flex items-center gap-2">
-                        {!showHighlights && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded normal-case font-medium">
-                            Clean View
-                          </span>
-                        )}
-                        <span className="text-xs text-green-600 font-semibold normal-case">Click anywhere to edit</span>
-                      </div>
+                      <span className="text-xs text-green-600 font-semibold normal-case">Click anywhere to edit</span>
                     </div>
                     
-                    {/* Enhanced Formatting Toolbar */}
                     <div className="flex items-center gap-2 mb-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-lg flex-wrap">
-                      {/* Text Formatting */}
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => formatText('bold')}
                           className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 font-bold text-sm transition-colors"
-                          title="Bold (Ctrl+B)"
+                          title="Bold"
                         >
                           B
                         </button>
                         <button
                           onClick={() => formatText('italic')}
                           className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 italic text-sm transition-colors"
-                          title="Italic (Ctrl+I)"
+                          title="Italic"
                         >
                           I
                         </button>
@@ -1773,7 +1156,6 @@ export default function ContentOps() {
                       
                       <div className="w-px h-6 bg-gray-300"></div>
                       
-                      {/* Headings */}
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => formatHeading(1)}
@@ -1800,7 +1182,6 @@ export default function ContentOps() {
                       
                       <div className="w-px h-6 bg-gray-300"></div>
                       
-                      {/* Links & Media */}
                       <div className="flex items-center gap-1">
                         <button
                           onClick={insertLink}
@@ -1817,32 +1198,15 @@ export default function ContentOps() {
                           🖼️ Image
                         </button>
                       </div>
-                      
-                      <div className="ml-auto text-xs text-gray-500 hidden lg:block">
-                        Select text → Format • Tables & widgets fully editable
-                      </div>
                     </div>
                     
-                    {/* Editable Content Area */}
                     <div 
                       ref={afterViewRef}
                       className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]"
                       contentEditable={true}
                       suppressContentEditableWarning={true}
                       onInput={handleAfterViewInput}
-                      onBlur={handleAfterViewInput}
                       onClick={handleContentClick}
-                      onKeyDown={(e) => {
-                        // Allow deleting selected images with Delete or Backspace
-                        if (e.key === 'Delete' || e.key === 'Backspace') {
-                          const selection = window.getSelection();
-                          if (selection.anchorNode?.nodeName === 'IMG' || 
-                              selection.anchorNode?.querySelector?.('img')) {
-                            // Let the default behavior handle it
-                            setTimeout(() => handleAfterViewInput(), 10);
-                          }
-                        }
-                      }}
                       style={{ 
                         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                         maxHeight: '800px',
@@ -1861,11 +1225,6 @@ export default function ContentOps() {
                 {loading ? <><Loader className="w-5 h-5 animate-spin" />Publishing...</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}
               </button>
             </div>
-            {status.message && (
-              <div className={`p-4 rounded-lg ${status.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                <p className={`text-sm ${status.type === 'error' ? 'text-red-800' : 'text-green-800'}`}>{status.message}</p>
-              </div>
-            )}
           </div>
         )}
 
@@ -1883,7 +1242,6 @@ export default function ContentOps() {
         )}
       </div>
 
-      {/* Image Alt Text Modal */}
       {imageAltModal.show && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 })}>
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1894,15 +1252,14 @@ export default function ContentOps() {
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Alt Text (for accessibility & SEO)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Alt Text</label>
               <textarea
                 value={imageAltModal.currentAlt}
                 onChange={(e) => setImageAltModal({ ...imageAltModal, currentAlt: e.target.value })}
-                placeholder="Describe this image for screen readers and SEO..."
+                placeholder="Describe this image..."
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent resize-none"
                 rows="3"
               />
-              <p className="text-xs text-gray-500 mt-1">Good alt text: "Screenshot of SalesRobot dashboard showing campaign analytics"</p>
             </div>
             
             <div className="flex gap-3">
@@ -1914,8 +1271,7 @@ export default function ContentOps() {
               </button>
               <button 
                 onClick={deleteImage}
-                className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 shadow-lg flex items-center justify-center gap-2"
-                title="Delete this image"
+                className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 shadow-lg"
               >
                 🗑️ Delete
               </button>
@@ -1923,14 +1279,13 @@ export default function ContentOps() {
                 onClick={updateImageAlt}
                 className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
               >
-                Save Alt Text
+                Save
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Link Modal */}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1938,7 +1293,6 @@ export default function ContentOps() {
               {editingLink ? '✏️ Edit Link' : '🔗 Add Link'}
             </h3>
             
-            {/* External Link Input */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Link URL</label>
               <input
@@ -1950,10 +1304,6 @@ export default function ContentOps() {
                 autoFocus
                 onKeyPress={(e) => e.key === 'Enter' && applyLink()}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                ✓ Opens in new tab automatically
-                {!editingLink && ' • Select text first for better results'}
-              </p>
             </div>
             
             <div className="flex gap-3">
@@ -1971,18 +1321,14 @@ export default function ContentOps() {
               {editingLink && (
                 <button 
                   onClick={() => {
-                    // Remove the link
                     if (editingLink) {
                       const text = editingLink.textContent;
                       const textNode = document.createTextNode(text);
                       editingLink.parentNode.replaceChild(textNode, editingLink);
-                      console.log('🗑️ Link removed');
                       
-                      setTimeout(() => {
-                        if (afterViewRef.current) {
-                          setEditedContent(afterViewRef.current.innerHTML);
-                        }
-                      }, 50);
+                      if (afterViewRef.current) {
+                        setEditedContent(afterViewRef.current.innerHTML);
+                      }
                     }
                     
                     setShowLinkModal(false);
@@ -1991,7 +1337,7 @@ export default function ContentOps() {
                   }}
                   className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 shadow-lg"
                 >
-                  🗑️ Remove Link
+                  🗑️ Remove
                 </button>
               )}
               
@@ -1999,23 +1345,20 @@ export default function ContentOps() {
                 onClick={applyLink}
                 className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
               >
-                {editingLink ? 'Update Link' : 'Add Link'}
+                {editingLink ? 'Update' : 'Add'}
               </button>
             </div>
           </div>
         </div>
       )}
-      
 
-      {/* Add Image Modal */}
       {showImageModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowImageModal(false)}>
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-[#0f172a] mb-4">🖼️ Add Image</h3>
             
-            {/* File Upload */}
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Upload Image File</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Upload Image</label>
               <input
                 type="file"
                 accept="image/*"
@@ -2023,29 +1366,22 @@ export default function ContentOps() {
                   const file = e.target.files?.[0];
                   if (file) {
                     setImageFile(file);
-                    setImageUrl(''); // Clear URL if file selected
+                    setImageUrl('');
                   }
                 }}
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
               />
-              <p className="text-xs text-gray-500 mt-1">✓ Upload from your computer (JPG, PNG, GIF, WebP)</p>
-              
               {imageFile && (
-                <div className="mt-3 p-3 bg-green-50 rounded border border-green-200">
-                  <p className="text-xs text-green-700 font-semibold">✓ File selected: {imageFile.name}</p>
-                  <p className="text-xs text-green-600 mt-1">Size: {(imageFile.size / 1024).toFixed(1)} KB</p>
-                </div>
+                <p className="text-xs text-green-700 mt-2">✓ {imageFile.name}</p>
               )}
             </div>
 
-            {/* OR Divider */}
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 border-t border-gray-300"></div>
               <span className="text-sm text-gray-500 font-semibold">OR</span>
               <div className="flex-1 border-t border-gray-300"></div>
             </div>
             
-            {/* URL Input */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Image URL</label>
               <input
@@ -2053,20 +1389,12 @@ export default function ContentOps() {
                 value={imageUrl}
                 onChange={(e) => {
                   setImageUrl(e.target.value);
-                  setImageFile(null); // Clear file if URL entered
+                  setImageFile(null);
                 }}
                 placeholder="https://example.com/image.jpg"
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
                 onKeyPress={(e) => e.key === 'Enter' && applyImage()}
               />
-              <p className="text-xs text-gray-500 mt-1">Enter image URL from web or CDN</p>
-              
-              {imageUrl && !imageFile && (
-                <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <p className="text-xs text-gray-600 mb-2">Preview:</p>
-                  <img src={imageUrl} alt="Preview" className="max-w-full h-auto rounded" style={{ maxHeight: '150px' }} onError={(e) => e.target.style.display = 'none'} />
-                </div>
-              )}
             </div>
             
             <div className="flex gap-3">
@@ -2084,7 +1412,7 @@ export default function ContentOps() {
                 onClick={applyImage}
                 className="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] shadow-lg"
               >
-                Insert Image
+                Insert
               </button>
             </div>
           </div>
