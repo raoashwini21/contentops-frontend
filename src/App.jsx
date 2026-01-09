@@ -139,9 +139,6 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
   
   return { html: highlightedHTML, changesCount };
 };
-  
-  return { html: highlightedHTML, changesCount };
-};
 
 function VisualEditor({ content, onChange }) {
   const editorRef = useRef(null);
