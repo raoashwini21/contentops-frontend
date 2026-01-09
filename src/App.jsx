@@ -49,13 +49,17 @@ ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct ad
 ❌ BAD: Describing table contents instead of preserving the HTML
 ✅ GOOD: Keep the exact <table> HTML structure with all rows and columns
 
-**SALESROBOT SPECIFIC UPDATES - MUST APPLY:**
-1. User count: Always use "4200+" users (not 4000, 3000, etc.)
-2. LinkedIn limits: "75 connection requests per day" (not 100/week, not other numbers)
-3. InMail limits: "40 InMails per day to open profiles without credits"
-4. AI naming: Replace "AI Inbox Manager" with "AI Appointment Setter"
-5. Tagline: Use "Message 100s of people on LinkedIn and cold email. Every Week. Automatically." (not "send 200+ messages" or similar)
-6. Compliance: Always mention "SalesRobot fully complies with LinkedIn limits"
+**SALESROBOT SPECIFIC UPDATES - ONLY WHERE ALREADY MENTIONED:**
+⚠️ CRITICAL: Do NOT add "SalesRobot" text or links where they don't already exist!
+1. User count: Update to "4200+" users - ONLY where user count is already mentioned
+2. LinkedIn limits: "75 connection requests per day" - ONLY where limits are already discussed
+3. InMail limits: "40 InMails per day to open profiles without credits" - ONLY in existing InMail sections
+4. AI naming: Replace "AI Inbox Manager" with "AI Appointment Setter" - ONLY where this feature is mentioned
+5. Tagline: Update tagline ONLY where tagline already exists - don't insert new ones
+6. Compliance: Mention "SalesRobot fully complies with LinkedIn limits" - ONLY in compliance/safety sections that already exist
+7. DO NOT insert random "SalesRobot" links in paragraphs that don't mention it
+8. DO NOT add promotional text or CTAs that weren't in the original
+9. ONLY fix/update existing SalesRobot mentions - never add new ones
 
 **YOUR REWRITING PROCESS:**
 1. Fix factual errors found by research: Update pricing accurately, correct feature descriptions, fix stats
@@ -71,16 +75,34 @@ Return only the complete rewritten HTML content with all images, tables, and wid
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   
-  // More comprehensive regex that includes widgets and custom divs
-  const blockRegex = /<(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)[^>]*>(?:(?!<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)>).)*<\/(?:p|h[1-6]|li|ul|ol|figure|div|a|section|article|blockquote|table)>|<img[^>]*\/?>/gis;
+  // Create a more precise regex that handles widget boundaries properly
+  // Match complete elements with their full content, but be more careful with divs
+  const splitIntoBlocks = (html) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+    const container = doc.body.firstChild;
+    const blocks = [];
+    
+    // Process each direct child as a separate block
+    Array.from(container.childNodes).forEach(node => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        blocks.push(node.outerHTML);
+      } else if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+        blocks.push(node.textContent);
+      }
+    });
+    
+    return blocks;
+  };
   
-  const originalBlocks = originalHTML.match(blockRegex) || [];
-  const updatedBlocks = updatedHTML.match(blockRegex) || [];
+  const originalBlocks = splitIntoBlocks(originalHTML);
+  const updatedBlocks = splitIntoBlocks(updatedHTML);
   
+  // Create a map of original blocks for comparison
   const originalMap = new Map();
   originalBlocks.forEach((block, idx) => {
     const cleaned = stripHTML(block);
-    if (cleaned) {
+    if (cleaned && cleaned.length > 5) {
       originalMap.set(cleaned, { html: block, index: idx });
     }
   });
@@ -103,17 +125,20 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
     // Only highlight if:
     // 1. Block has substantial text (more than 20 chars)
     // 2. Block doesn't exist in original
-    // 3. Block is not a special element (table, widget, image, etc.)
+    // 3. Block is not a special element
     if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
-      // For block-level elements, add a wrapper div instead of inline span
+      // Wrap in a highlight div that doesn't interfere with content structure
       const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
       highlightedHTML += highlighted;
       changesCount++;
     } else {
-      // Keep the block as-is without any highlighting
+      // Keep the block as-is - this is critical for widgets
       highlightedHTML += updatedBlock;
     }
   });
+  
+  return { html: highlightedHTML, changesCount };
+};
   
   return { html: highlightedHTML, changesCount };
 };
@@ -302,7 +327,7 @@ export default function ContentOps() {
   const [editedContent, setEditedContent] = useState('');
   const [highlightedData, setHighlightedData] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
-  const [showHighlights, setShowHighlights] = useState(true);
+  const [showHighlights, setShowHighlights] = useState(false); // Start with highlights OFF to avoid widget confusion
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -379,6 +404,12 @@ export default function ContentOps() {
   // Format text (bold, italic)
   const formatText = (command) => {
     document.execCommand(command, false, null);
+    afterViewRef.current?.focus();
+  };
+
+  // Format as heading
+  const formatHeading = (level) => {
+    document.execCommand('formatBlock', false, `<h${level}>`);
     afterViewRef.current?.focus();
   };
 
@@ -1184,14 +1215,23 @@ export default function ContentOps() {
               {viewMode === 'changes' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-blue-800 text-sm">✨ <span className="font-semibold">AFTER panel is now editable!</span> • Click tables, text, or headings to edit directly • {highlightedData?.changesCount || 0} sections highlighted in blue</p>
+                    <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-1 mr-3">
+                      <p className="text-blue-800 text-sm">
+                        ✨ <span className="font-semibold">Edit content directly!</span> Use toolbar to format (B, I, H1-H3, Link, Image) • 
+                        <span className="font-semibold">Toggle highlights</span> to see AI changes
+                        {!showHighlights && <span className="text-green-600"> → Clean view active</span>}
+                        {showHighlights && <span className="text-blue-600"> → {highlightedData?.changesCount || 0} changes marked</span>}
+                      </p>
                     </div>
                     <button
                       onClick={() => setShowHighlights(!showHighlights)}
-                      className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2"
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 whitespace-nowrap ${
+                        showHighlights 
+                          ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      }`}
                     >
-                      {showHighlights ? '👁️ Hide Highlights' : '✨ Show Highlights'}
+                      {showHighlights ? '✨ Highlights ON' : '👁️ Show Changes'}
                     </button>
                   </div>
                   
@@ -1256,10 +1296,16 @@ export default function ContentOps() {
                       margin: 1rem 0;
                     }
                     .blog-content .info-widget, .blog-content [class*="widget"] {
-                      margin: 1rem 0;
+                      margin: 1.5rem 0;
                       padding: 1rem;
-                      border-left: 3px solid #6366f1;
-                      background-color: #f5f3ff;
+                      border-left: 4px solid #8b5cf6;
+                      background: linear-gradient(to right, #f5f3ff 0%, #faf5ff 100%);
+                      border-radius: 4px;
+                      box-shadow: 0 1px 3px rgba(139, 92, 246, 0.1);
+                    }
+                    .blog-content .info-widget h4, .blog-content [class*="widget"] h4 {
+                      color: #7c3aed;
+                      margin-top: 0;
                     }
                     .blog-content .info-widget {
                       background-color: #fef3c7;
@@ -1347,81 +1393,108 @@ export default function ContentOps() {
                     }
                   `}</style>
                   
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* BEFORE */}
-                    <div className="bg-gray-50 rounded-xl p-6 border border-gray-300">
-                      <div className="text-gray-700 text-sm font-bold mb-4 uppercase tracking-wide sticky top-0 bg-gray-50 py-2">
-                        ❌ BEFORE (Original)
+                  {/* Single Full-Width Editable Content Panel */}
+                  <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
+                    <div className="text-[#0ea5e9] text-sm font-bold mb-2 uppercase tracking-wide flex items-center justify-between">
+                      <span>📝 EDITABLE CONTENT {showHighlights && '(Changes Highlighted)'}</span>
+                      <div className="flex items-center gap-2">
+                        {!showHighlights && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded normal-case font-medium">
+                            Clean View
+                          </span>
+                        )}
+                        <span className="text-xs text-green-600 font-semibold normal-case">Click anywhere to edit</span>
                       </div>
-                      <div 
-                        className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
-                        style={{ 
-                          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                          maxHeight: '800px'
-                        }}
-                        dangerouslySetInnerHTML={{ __html: result.originalContent }}
-                      />
                     </div>
-
-                    {/* AFTER with highlights - NOW EDITABLE */}
-                    <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
-                      <div className="text-[#0ea5e9] text-sm font-bold mb-2 uppercase tracking-wide sticky top-0 bg-white py-2 flex items-center justify-between">
-                        <span>✅ AFTER (Updated{showHighlights ? ' - Changes Highlighted' : ''}) ✏️</span>
-                        <span className="text-xs text-green-600 font-semibold normal-case">Click to edit!</span>
-                      </div>
-                      
-                      {/* Mini Toolbar */}
-                      <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 border border-gray-200 rounded-lg flex-wrap">
+                    
+                    {/* Enhanced Formatting Toolbar */}
+                    <div className="flex items-center gap-2 mb-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-lg flex-wrap">
+                      {/* Text Formatting */}
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => formatText('bold')}
-                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 font-bold text-sm"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 font-bold text-sm transition-colors"
                           title="Bold (Ctrl+B)"
                         >
                           B
                         </button>
                         <button
                           onClick={() => formatText('italic')}
-                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 italic text-sm"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 italic text-sm transition-colors"
                           title="Italic (Ctrl+I)"
                         >
                           I
                         </button>
-                        <div className="w-px h-6 bg-gray-300"></div>
+                      </div>
+                      
+                      <div className="w-px h-6 bg-gray-300"></div>
+                      
+                      {/* Headings */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => formatHeading(1)}
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold transition-colors"
+                          title="Heading 1"
+                        >
+                          H1
+                        </button>
+                        <button
+                          onClick={() => formatHeading(2)}
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold transition-colors"
+                          title="Heading 2"
+                        >
+                          H2
+                        </button>
+                        <button
+                          onClick={() => formatHeading(3)}
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-semibold transition-colors"
+                          title="Heading 3"
+                        >
+                          H3
+                        </button>
+                      </div>
+                      
+                      <div className="w-px h-6 bg-gray-300"></div>
+                      
+                      {/* Links & Media */}
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={insertLink}
-                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1 transition-colors"
                           title="Add Link"
                         >
                           🔗 Link
                         </button>
                         <button
                           onClick={insertImage}
-                          className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1"
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm flex items-center gap-1 transition-colors"
                           title="Add Image"
                         >
                           🖼️ Image
                         </button>
-                        <div className="ml-auto text-xs text-gray-500">
-                          Select text first for bold/italic/link
-                        </div>
                       </div>
                       
-                      <div 
-                        ref={afterViewRef}
-                        className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-4"
-                        contentEditable={true}
-                        suppressContentEditableWarning={true}
-                        onInput={handleAfterViewInput}
-                        onBlur={handleAfterViewInput}
-                        onClick={handleImageClick}
-                        style={{ 
-                          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                          maxHeight: '800px',
-                          outline: 'none',
-                          cursor: 'text'
-                        }}
-                      />
+                      <div className="ml-auto text-xs text-gray-500 hidden lg:block">
+                        Select text → Format • Tables & widgets fully editable
+                      </div>
                     </div>
+                    
+                    {/* Editable Content Area */}
+                    <div 
+                      ref={afterViewRef}
+                      className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]"
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onInput={handleAfterViewInput}
+                      onBlur={handleAfterViewInput}
+                      onClick={handleImageClick}
+                      style={{ 
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                        maxHeight: '800px',
+                        outline: 'none',
+                        cursor: 'text'
+                      }}
+                    />
                   </div>
                 </div>
               )}
