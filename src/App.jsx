@@ -326,8 +326,8 @@ export default function ContentOps() {
         : editedContent;
       afterViewRef.current.innerHTML = contentToShow;
     }
-  }, [viewMode, showHighlights, editedContent]);
-
+}, [viewMode, showHighlights, highlightedData]);
+   
   const handleEditablePreviewInput = () => {
     if (editablePreviewRef.current) {
       setEditedContent(editablePreviewRef.current.innerHTML);
