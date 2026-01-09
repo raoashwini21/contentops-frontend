@@ -331,7 +331,10 @@ export default function ContentOps() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [linkType, setLinkType] = useState('external'); // 'external' or 'heading'
+  const [selectedHeading, setSelectedHeading] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageFile, setImageFile] = useState(null);
   const [savedSelection, setSavedSelection] = useState(null);
 
   useEffect(() => {
@@ -447,26 +450,43 @@ export default function ContentOps() {
     }
   };
 
-  // Format text (bold, italic)
+  // Format text (bold, italic) - Using manual approach for better reliability
   const formatText = (command) => {
-    // Focus first to ensure selection is in the contentEditable div
-    afterViewRef.current?.focus();
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
     
-    // Mark as user editing
-    isUserEditingRef.current = true;
+    const range = selection.getRangeAt(0);
+    const selectedText = range.toString();
     
-    // Apply the format
-    const success = document.execCommand(command, false, null);
-    console.log(`✏️ Applied ${command} formatting:`, success ? 'success' : 'failed');
+    if (!selectedText) {
+      alert('Please select text first');
+      return;
+    }
     
-    // Force update after a short delay to ensure DOM has updated
+    // Create the appropriate tag
+    const tag = command === 'bold' ? 'strong' : 'em';
+    const element = document.createElement(tag);
+    element.textContent = selectedText;
+    
+    // Replace the selected text with formatted version
+    range.deleteContents();
+    range.insertNode(element);
+    
+    // Move cursor after the inserted element
+    range.setStartAfter(element);
+    range.setEndAfter(element);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    
+    console.log(`✏️ Applied ${command} formatting manually`);
+    
+    // Save changes
     setTimeout(() => {
       if (afterViewRef.current) {
         const currentHTML = afterViewRef.current.innerHTML;
-        console.log('💾 Saving formatted content');
         setEditedContent(currentHTML);
+        console.log('💾 Saved formatted content');
       }
-      isUserEditingRef.current = false;
     }, 50);
   };
 
@@ -499,9 +519,29 @@ export default function ContentOps() {
     setShowLinkModal(true);
   };
 
-  const applyLink = () => {
-    if (!linkUrl) return;
+  // Get all headings from content for anchor link dropdown
+  const getHeadingsFromContent = () => {
+    if (!afterViewRef.current) return [];
     
+    const headings = afterViewRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    return Array.from(headings).map((heading, index) => {
+      // Create ID if doesn't exist
+      if (!heading.id) {
+        const id = heading.textContent
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+        heading.id = id || `heading-${index}`;
+      }
+      return {
+        id: heading.id,
+        text: heading.textContent,
+        level: heading.tagName
+      };
+    });
+  };
+
+  const applyLink = () => {
     // Mark as user editing
     isUserEditingRef.current = true;
     
@@ -509,23 +549,61 @@ export default function ContentOps() {
     restoreSelection();
     
     const selection = window.getSelection();
-    if (selection.toString()) {
-      // Text is selected, create link
-      const success = document.execCommand('createLink', false, linkUrl);
-      console.log('🔗 Link created:', success ? 'success' : 'failed', linkUrl);
+    const selectedText = selection.toString();
+    
+    let finalUrl = '';
+    
+    if (linkType === 'heading') {
+      // Create anchor link to heading
+      if (!selectedHeading) {
+        alert('Please select a heading');
+        return;
+      }
+      finalUrl = `#${selectedHeading}`;
     } else {
-      // No text selected, insert link with URL as text
-      const link = document.createElement('a');
-      link.href = linkUrl;
-      link.textContent = linkUrl;
-      link.style.color = '#0ea5e9';
-      link.style.textDecoration = 'underline';
+      // External link
+      if (!linkUrl) {
+        alert('Please enter a URL');
+        return;
+      }
+      finalUrl = linkUrl;
+    }
+    
+    // Create link element
+    const link = document.createElement('a');
+    link.href = finalUrl;
+    
+    // External links open in new tab
+    if (linkType === 'external') {
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    }
+    
+    link.style.color = '#0ea5e9';
+    link.style.textDecoration = 'underline';
+    
+    if (selectedText) {
+      // Use selected text as link text
+      link.textContent = selectedText;
+      
+      // Replace selection with link
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(link);
+      range.setStartAfter(link);
+      range.collapse(true);
+      
+      console.log('🔗 Link created:', linkType, finalUrl);
+    } else {
+      // No text selected, insert link with URL/heading as text
+      link.textContent = linkType === 'heading' ? selectedHeading : finalUrl;
       
       if (savedSelection) {
         savedSelection.insertNode(link);
         savedSelection.collapse(false);
-        console.log('🔗 Link inserted:', linkUrl);
       }
+      
+      console.log('🔗 Link inserted:', linkType, finalUrl);
     }
     
     // Focus back on the editor
@@ -544,6 +622,8 @@ export default function ContentOps() {
     // Close modal and reset
     setShowLinkModal(false);
     setLinkUrl('');
+    setLinkType('external');
+    setSelectedHeading('');
   };
 
   // Insert image
@@ -551,14 +631,38 @@ export default function ContentOps() {
     setShowImageModal(true);
   };
 
-  const applyImage = () => {
-    if (!imageUrl) return;
-    
+  const applyImage = async () => {
     // Mark as user editing
     isUserEditingRef.current = true;
     
+    let imageSrc = '';
+    
+    // Handle file upload
+    if (imageFile) {
+      try {
+        // Convert file to base64
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(imageFile);
+        });
+        imageSrc = base64;
+        console.log('🖼️ Image converted to base64');
+      } catch (error) {
+        console.error('Error reading image file:', error);
+        alert('Failed to read image file');
+        return;
+      }
+    } else if (imageUrl) {
+      imageSrc = imageUrl;
+    } else {
+      alert('Please select an image file or enter a URL');
+      return;
+    }
+    
     const img = document.createElement('img');
-    img.src = imageUrl;
+    img.src = imageSrc;
     img.style.maxWidth = '100%';
     img.style.height = 'auto';
     img.style.display = 'block';
@@ -571,10 +675,10 @@ export default function ContentOps() {
       const range = selection.getRangeAt(0);
       range.insertNode(img);
       range.collapse(false);
-      console.log('🖼️ Image inserted:', imageUrl);
+      console.log('🖼️ Image inserted');
     } else {
       afterViewRef.current?.appendChild(img);
-      console.log('🖼️ Image appended:', imageUrl);
+      console.log('🖼️ Image appended');
     }
     
     // Force update after a short delay
@@ -589,6 +693,7 @@ export default function ContentOps() {
     
     setShowImageModal(false);
     setImageUrl('');
+    setImageFile(null);
   };
 
   const handleImageClick = (e) => {
@@ -1749,23 +1854,79 @@ export default function ContentOps() {
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-[#0f172a] mb-4">🔗 Add Link</h3>
             
+            {/* Link Type Selector */}
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Link URL</label>
-              <input
-                type="url"
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
-                autoFocus
-                onKeyPress={(e) => e.key === 'Enter' && applyLink()}
-              />
-              <p className="text-xs text-gray-500 mt-1">Tip: Select text first, then click Link button</p>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Link Type</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setLinkType('external')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all ${
+                    linkType === 'external'
+                      ? 'bg-[#0ea5e9] text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  🌐 External Link
+                </button>
+                <button
+                  onClick={() => setLinkType('heading')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all ${
+                    linkType === 'heading'
+                      ? 'bg-[#0ea5e9] text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  📑 Link to Heading
+                </button>
+              </div>
             </div>
+
+            {/* External Link Input */}
+            {linkType === 'external' && (
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">External URL</label>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                  autoFocus
+                  onKeyPress={(e) => e.key === 'Enter' && applyLink()}
+                />
+                <p className="text-xs text-gray-500 mt-1">✓ Opens in new tab • Select text first for better results</p>
+              </div>
+            )}
+
+            {/* Heading Selector */}
+            {linkType === 'heading' && (
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Heading</label>
+                <select
+                  value={selectedHeading}
+                  onChange={(e) => setSelectedHeading(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                  autoFocus
+                >
+                  <option value="">-- Choose a heading --</option>
+                  {getHeadingsFromContent().map((heading) => (
+                    <option key={heading.id} value={heading.id}>
+                      {heading.level}: {heading.text}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Creates anchor link to heading in this page</p>
+              </div>
+            )}
             
             <div className="flex gap-3">
               <button 
-                onClick={() => { setShowLinkModal(false); setLinkUrl(''); }}
+                onClick={() => { 
+                  setShowLinkModal(false); 
+                  setLinkUrl(''); 
+                  setLinkType('external');
+                  setSelectedHeading('');
+                }}
                 className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
               >
                 Cancel
@@ -1787,20 +1948,55 @@ export default function ContentOps() {
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-[#0f172a] mb-4">🖼️ Add Image</h3>
             
+            {/* File Upload */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Upload Image File</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setImageFile(file);
+                    setImageUrl(''); // Clear URL if file selected
+                  }
+                }}
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">✓ Upload from your computer (JPG, PNG, GIF, WebP)</p>
+              
+              {imageFile && (
+                <div className="mt-3 p-3 bg-green-50 rounded border border-green-200">
+                  <p className="text-xs text-green-700 font-semibold">✓ File selected: {imageFile.name}</p>
+                  <p className="text-xs text-green-600 mt-1">Size: {(imageFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+              )}
+            </div>
+
+            {/* OR Divider */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 border-t border-gray-300"></div>
+              <span className="text-sm text-gray-500 font-semibold">OR</span>
+              <div className="flex-1 border-t border-gray-300"></div>
+            </div>
+            
+            {/* URL Input */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Image URL</label>
               <input
                 type="url"
                 value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
+                onChange={(e) => {
+                  setImageUrl(e.target.value);
+                  setImageFile(null); // Clear file if URL entered
+                }}
                 placeholder="https://example.com/image.jpg"
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
-                autoFocus
                 onKeyPress={(e) => e.key === 'Enter' && applyImage()}
               />
-              <p className="text-xs text-gray-500 mt-1">Enter the full URL of the image you want to insert</p>
+              <p className="text-xs text-gray-500 mt-1">Enter image URL from web or CDN</p>
               
-              {imageUrl && (
+              {imageUrl && !imageFile && (
                 <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200">
                   <p className="text-xs text-gray-600 mb-2">Preview:</p>
                   <img src={imageUrl} alt="Preview" className="max-w-full h-auto rounded" style={{ maxHeight: '150px' }} onError={(e) => e.target.style.display = 'none'} />
@@ -1810,7 +2006,11 @@ export default function ContentOps() {
             
             <div className="flex gap-3">
               <button 
-                onClick={() => { setShowImageModal(false); setImageUrl(''); }}
+                onClick={() => { 
+                  setShowImageModal(false); 
+                  setImageUrl(''); 
+                  setImageFile(null);
+                }}
                 className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 border border-gray-300"
               >
                 Cancel
