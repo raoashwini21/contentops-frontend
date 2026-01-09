@@ -459,60 +459,10 @@ export default function ContentOps() {
 
   // Save current selection for link/image insertion
   const saveSelection = () => {
-    try {
-      // First ensure editor has focus
-      if (afterViewRef.current) {
-        if (document.activeElement !== afterViewRef.current) {
-          afterViewRef.current.focus();
-        }
-      }
-      
-      const selection = window.getSelection();
-      
-      // If no selection, create one at end of content
-      if (!selection || selection.rangeCount === 0) {
-        console.warn('⚠️ No selection - creating one at end');
-        if (afterViewRef.current) {
-          const range = document.createRange();
-          range.selectNodeContents(afterViewRef.current);
-          range.collapse(false); // To end
-          selection.removeAllRanges();
-          selection.addRange(range);
-          setSavedSelection(range.cloneRange());
-          console.log('💾 Created selection at end');
-          return;
-        }
-        setSavedSelection(null);
-        return;
-      }
-      
-      const range = selection.getRangeAt(0);
-      
-      // Verify selection is inside editor
-      let container = range.commonAncestorContainer;
-      let isInEditor = false;
-      
-      while (container) {
-        if (container === afterViewRef.current) {
-          isInEditor = true;
-          break;
-        }
-        container = container.parentNode;
-      }
-      
-      if (!isInEditor) {
-        console.warn('⚠️ Selection outside editor - ignoring');
-        setSavedSelection(null);
-        return;
-      }
-      
-      // Save the clone
-      setSavedSelection(range.cloneRange());
-      console.log('💾 Selection saved successfully');
-      
-    } catch (error) {
-      console.error('❌ saveSelection error:', error);
-      setSavedSelection(null);
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      setSavedSelection(selection.getRangeAt(0).cloneRange());
+      console.log('💾 Selection saved for later use');
     }
   };
 
@@ -637,16 +587,11 @@ export default function ContentOps() {
       }
     }
     
-    // Creating new link - ensure focus and save
-    if (afterViewRef.current) {
-      afterViewRef.current.focus();
-      setTimeout(() => {
-        saveSelection();
-        setEditingLink(null);
-        setLinkUrl('');
-        setShowLinkModal(true);
-      }, 50);
-    }
+    // Creating new link
+    saveSelection();
+    setEditingLink(null);
+    setLinkUrl('');
+    setShowLinkModal(true);
   };
 
   const applyLink = () => {
@@ -655,6 +600,7 @@ export default function ContentOps() {
       return;
     }
     
+    // Mark as user editing
     isUserEditingRef.current = true;
     
     if (editingLink) {
@@ -664,24 +610,16 @@ export default function ContentOps() {
       editingLink.rel = 'noopener noreferrer';
       console.log('🔗 Link updated:', linkUrl);
     } else {
-      // Creating new link
-      if (!savedSelection) {
-        alert('Please click in the editor first, then click the Link button again.');
-        setShowLinkModal(false);
-        isUserEditingRef.current = false;
-        return;
-      }
-      
-      try {
+      // Creating new link - USE SAVED SELECTION!
+      if (savedSelection) {
+        // Restore the saved selection
         const selection = window.getSelection();
         selection.removeAllRanges();
-        
-        // Clone the saved selection to use it
-        const newRange = savedSelection.cloneRange();
-        selection.addRange(newRange);
+        selection.addRange(savedSelection);
         
         const selectedText = selection.toString();
         
+        // Create link element
         const link = document.createElement('a');
         link.href = linkUrl;
         link.target = '_blank';
@@ -690,37 +628,45 @@ export default function ContentOps() {
         link.style.textDecoration = 'underline';
         
         if (selectedText) {
+          // Use selected text as link text
           link.textContent = selectedText;
-          newRange.deleteContents();
+          
+          // Replace selection with link
+          savedSelection.deleteContents();
+          savedSelection.insertNode(link);
+          savedSelection.setStartAfter(link);
+          savedSelection.collapse(true);
+          
+          console.log('🔗 Link created at saved position:', linkUrl);
         } else {
+          // No text selected, insert link with URL as text
           link.textContent = linkUrl;
+          savedSelection.insertNode(link);
+          savedSelection.setStartAfter(link);
+          savedSelection.collapse(true);
+          
+          console.log('🔗 Link inserted at saved position:', linkUrl);
         }
-        
-        newRange.insertNode(link);
-        newRange.setStartAfter(link);
-        newRange.collapse(true);
-        
-        console.log('🔗 Link created successfully');
-      } catch (error) {
-        console.error('❌ Error creating link:', error);
-        alert('Failed to create link. Please try clicking in the editor first, then try again.');
-        isUserEditingRef.current = false;
-        setShowLinkModal(false);
-        setLinkUrl('');
-        setEditingLink(null);
+      } else {
+        alert('No cursor position saved. Please click in the editor first.');
         return;
       }
     }
     
+    // Focus back on the editor
     afterViewRef.current?.focus();
     
+    // Force update after a short delay
     setTimeout(() => {
       if (afterViewRef.current) {
-        setEditedContent(afterViewRef.current.innerHTML);
+        const currentHTML = afterViewRef.current.innerHTML;
+        console.log('💾 Saving linked content');
+        setEditedContent(currentHTML);
       }
       isUserEditingRef.current = false;
     }, 50);
     
+    // Close modal and reset
     setShowLinkModal(false);
     setLinkUrl('');
     setEditingLink(null);
@@ -728,28 +674,20 @@ export default function ContentOps() {
 
   // Insert image
   const insertImage = () => {
-    // Make sure editor has focus first
-    if (afterViewRef.current) {
-      afterViewRef.current.focus();
-      // Small delay to ensure focus is set
-      setTimeout(() => {
-        saveSelection();
-        setShowImageModal(true);
-      }, 50);
-    } else {
-      saveSelection();
-      setShowImageModal(true);
-    }
+    saveSelection(); // CRITICAL: Save cursor position BEFORE modal opens!
+    setShowImageModal(true);
   };
 
   const applyImage = async () => {
+    // Mark as user editing
     isUserEditingRef.current = true;
     
     let imageSrc = '';
     
-    // Get image source
+    // Handle file upload
     if (imageFile) {
       try {
+        // Convert file to base64
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -761,60 +699,50 @@ export default function ContentOps() {
       } catch (error) {
         console.error('Error reading image file:', error);
         alert('Failed to read image file');
-        isUserEditingRef.current = false;
         return;
       }
     } else if (imageUrl) {
       imageSrc = imageUrl;
     } else {
       alert('Please select an image file or enter a URL');
-      isUserEditingRef.current = false;
       return;
     }
     
-    // Validate savedSelection
-    if (!savedSelection) {
-      alert('Please click in the editor first, then click the Image button again.');
-      setShowImageModal(false);
-      isUserEditingRef.current = false;
-      return;
-    }
-    
-    try {
-      const img = document.createElement('img');
-      img.src = imageSrc;
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-      img.style.display = 'block';
-      img.style.margin = '1rem 0';
-      img.alt = 'Inserted image';
+    const img = document.createElement('img');
+    img.src = imageSrc;
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
+    img.style.margin = '1rem 0';
+    img.alt = 'Inserted image';
 
-      // Restore selection
+    // USE SAVED SELECTION (not current selection!)
+    if (savedSelection) {
+      // Restore the saved selection
       const selection = window.getSelection();
       selection.removeAllRanges();
+      selection.addRange(savedSelection);
       
-      // Create new range from saved selection
-      const newRange = savedSelection.cloneRange();
-      selection.addRange(newRange);
+      // Insert image at saved position
+      savedSelection.insertNode(img);
       
-      // Insert image
-      newRange.insertNode(img);
-      newRange.setStartAfter(img);
-      newRange.collapse(true);
+      // Move cursor after image
+      savedSelection.setStartAfter(img);
+      savedSelection.collapse(true);
       
-      console.log('🖼️ Image inserted successfully');
-    } catch (error) {
-      console.error('❌ Error inserting image:', error);
-      alert('Failed to insert image. Please try clicking in the editor first, then try again.');
-      isUserEditingRef.current = false;
-      return;
+      console.log('🖼️ Image inserted at saved position');
+    } else {
+      // Fallback: append to end if no saved selection
+      afterViewRef.current?.appendChild(img);
+      console.log('🖼️ Image appended to end (no saved position)');
     }
     
-    // Save content
+    // Force update after a short delay
     setTimeout(() => {
       if (afterViewRef.current) {
-        setEditedContent(afterViewRef.current.innerHTML);
-        console.log('💾 Content saved with image');
+        const currentHTML = afterViewRef.current.innerHTML;
+        console.log('💾 Saving content with new image');
+        setEditedContent(currentHTML);
       }
       isUserEditingRef.current = false;
     }, 50);
@@ -869,39 +797,25 @@ export default function ContentOps() {
       return;
     }
     
-    // Temporarily disable syncing to prevent conflicts
-    isSyncingRef.current = true;
-    isUserEditingRef.current = true;
-    
     const parser = new DOMParser();
     const doc = parser.parseFromString(editedContent, 'text/html');
     const images = doc.querySelectorAll('img');
     
     if (images[imageAltModal.index]) {
+      // Remove the image element
       const imageElement = images[imageAltModal.index];
-      const figure = imageElement.closest('figure');
       
+      // Check if image is wrapped in a figure tag and remove the whole figure
+      const figure = imageElement.closest('figure');
       if (figure) {
         figure.remove();
       } else {
         imageElement.remove();
       }
       
-      const newContent = doc.body.innerHTML;
-      setEditedContent(newContent);
+      setEditedContent(doc.body.innerHTML);
       console.log('🗑️ Image deleted');
-      
-      // Force immediate visual update
-      if (afterViewRef.current) {
-        afterViewRef.current.innerHTML = newContent;
-      }
     }
-    
-    // Reset flags after delay
-    setTimeout(() => {
-      isSyncingRef.current = false;
-      isUserEditingRef.current = false;
-    }, 200);
     
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
   };
