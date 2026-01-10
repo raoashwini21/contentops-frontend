@@ -18,7 +18,9 @@ ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong
 **CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
 - Keep ALL <iframe>, <script>, <embed>, <object>, <video>, <audio>, <canvas>, <form> tags EXACTLY as-is
 - Keep ALL widget classes (w-embed-, w-widget-, info-widget, widget-, etc.) unchanged
-- Keep ALL data attributes (data-*, w-*, webflow-*) unchanged  
+- Keep ALL data attributes (data-*, w-*, webflow-*) unchanged
+- Keep the "hidden" class on widget elements - DO NOT remove it
+- Keep ALL widget structure and nested elements intact (widget-type, info-widget-heading, info-widget-content, etc.)
 - NEVER convert widgets/embeds to text - keep them as functional HTML
 - NEVER escape HTML in widgets - keep < > characters not &lt; &gt;
 Return only the complete rewritten HTML content with all images, tables, widgets, iframes, scripts, and embeds preserved EXACTLY as HTML with no modifications.`;
@@ -62,9 +64,9 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
     const isSpecialElement = 
       updatedBlock.match(/<(table|iframe|embed|script|img|figure|video|audio|canvas|object|svg|form)/i) ||
       updatedBlock.match(/class="[^"]*widget[^"]*"/i) ||
+      updatedBlock.match(/class="[^"]*-widget[^"]*"/i) ||
       updatedBlock.match(/class="[^"]*w-embed[^"]*"/i) ||
       updatedBlock.match(/class="[^"]*w-widget[^"]*"/i) ||
-      updatedBlock.match(/class="[^"]*info-widget[^"]*"/i) ||
       updatedBlock.match(/data-w-id/i) ||
       updatedBlock.match(/data-widget/i) ||
       updatedBlock.includes('<script') ||
@@ -719,6 +721,69 @@ export default function ContentOps() {
                             max-width: 100%;
                             margin: 1.5rem 0;
                           }
+                          /* Override hidden class for widget content */
+                          .editable-preview .info-widget .hidden,
+                          .editable-preview [class*="widget"] .hidden,
+                          .editable-preview [class*="-widget"] .hidden,
+                          .editable-preview [class*="w-embed"] .hidden,
+                          .editable-preview [class*="w-widget"] .hidden {
+                            display: block !important;
+                            visibility: visible !important;
+                          }
+                          /* Generic styling for ALL widget types */
+                          .editable-preview [class*="-widget"],
+                          .editable-preview [class*="widget-"] {
+                            margin: 1.5rem 0;
+                            padding: 1.5rem;
+                            border-radius: 6px;
+                          }
+                          /* Style info-widget boxes (blue) */
+                          .editable-preview .info-widget,
+                          .editable-preview [class*="info-widget"] {
+                            background-color: #f0f9ff;
+                            border-left: 4px solid #0ea5e9;
+                          }
+                          /* Style warning/caution widgets (yellow/orange) */
+                          .editable-preview .warning-widget,
+                          .editable-preview .caution-widget,
+                          .editable-preview [class*="warning-widget"],
+                          .editable-preview [class*="caution-widget"] {
+                            background-color: #fef3c7;
+                            border-left: 4px solid #f59e0b;
+                          }
+                          /* Style success/tip widgets (green) */
+                          .editable-preview .success-widget,
+                          .editable-preview .tip-widget,
+                          .editable-preview [class*="success-widget"],
+                          .editable-preview [class*="tip-widget"] {
+                            background-color: #d1fae5;
+                            border-left: 4px solid #10b981;
+                          }
+                          /* Style error/danger widgets (red) */
+                          .editable-preview .error-widget,
+                          .editable-preview .danger-widget,
+                          .editable-preview [class*="error-widget"],
+                          .editable-preview [class*="danger-widget"] {
+                            background-color: #fee2e2;
+                            border-left: 4px solid #ef4444;
+                          }
+                          /* Generic widget heading styles */
+                          .editable-preview [class*="widget-heading"],
+                          .editable-preview [class*="-widget-heading"] {
+                            font-size: 1.125rem;
+                            font-weight: 600;
+                            margin: 0 0 0.75rem 0;
+                          }
+                          /* Widget type labels */
+                          .editable-preview .widget-type,
+                          .editable-preview [class*="widget-type"] {
+                            display: inline-block;
+                            font-size: 0.875rem;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.05em;
+                            margin-bottom: 0.5rem;
+                          }
                           .editable-preview [class*="widget"],
                           .editable-preview [class*="w-embed"],
                           .editable-preview [class*="w-widget"] {
@@ -813,6 +878,109 @@ export default function ContentOps() {
                       }
                       .blog-content script {
                         display: block;
+                      }
+                      /* Override hidden class for widget content */
+                      .blog-content .info-widget .hidden,
+                      .blog-content [class*="widget"] .hidden,
+                      .blog-content [class*="-widget"] .hidden,
+                      .blog-content [class*="w-embed"] .hidden,
+                      .blog-content [class*="w-widget"] .hidden {
+                        display: block !important;
+                        visibility: visible !important;
+                      }
+                      /* Generic styling for ALL widget types */
+                      .blog-content [class*="-widget"],
+                      .blog-content [class*="widget-"] {
+                        margin: 1.5rem 0;
+                        padding: 1.5rem;
+                        border-radius: 6px;
+                      }
+                      /* Style info-widget boxes (blue) */
+                      .blog-content .info-widget,
+                      .blog-content [class*="info-widget"] {
+                        background-color: #f0f9ff;
+                        border-left: 4px solid #0ea5e9;
+                      }
+                      /* Style warning/caution widgets (yellow/orange) */
+                      .blog-content .warning-widget,
+                      .blog-content .caution-widget,
+                      .blog-content [class*="warning-widget"],
+                      .blog-content [class*="caution-widget"] {
+                        background-color: #fef3c7;
+                        border-left: 4px solid #f59e0b;
+                      }
+                      /* Style success/tip widgets (green) */
+                      .blog-content .success-widget,
+                      .blog-content .tip-widget,
+                      .blog-content [class*="success-widget"],
+                      .blog-content [class*="tip-widget"] {
+                        background-color: #d1fae5;
+                        border-left: 4px solid #10b981;
+                      }
+                      /* Style error/danger widgets (red) */
+                      .blog-content .error-widget,
+                      .blog-content .danger-widget,
+                      .blog-content [class*="error-widget"],
+                      .blog-content [class*="danger-widget"] {
+                        background-color: #fee2e2;
+                        border-left: 4px solid #ef4444;
+                      }
+                      /* Generic widget heading styles */
+                      .blog-content [class*="widget-heading"],
+                      .blog-content [class*="-widget-heading"] {
+                        font-size: 1.125rem;
+                        font-weight: 600;
+                        margin: 0 0 0.75rem 0;
+                      }
+                      .blog-content .info-widget [class*="heading"] {
+                        color: #0ea5e9;
+                      }
+                      .blog-content .warning-widget [class*="heading"],
+                      .blog-content .caution-widget [class*="heading"] {
+                        color: #f59e0b;
+                      }
+                      .blog-content .success-widget [class*="heading"],
+                      .blog-content .tip-widget [class*="heading"] {
+                        color: #10b981;
+                      }
+                      .blog-content .error-widget [class*="heading"],
+                      .blog-content .danger-widget [class*="heading"] {
+                        color: #ef4444;
+                      }
+                      /* Generic widget content styles */
+                      .blog-content [class*="widget-content"],
+                      .blog-content [class*="-widget-content"] {
+                        color: #1e293b;
+                        line-height: 1.7;
+                      }
+                      .blog-content [class*="widget-content"] p,
+                      .blog-content [class*="-widget-content"] p {
+                        margin: 0;
+                      }
+                      /* Widget type labels */
+                      .blog-content .widget-type,
+                      .blog-content [class*="widget-type"] {
+                        display: inline-block;
+                        font-size: 0.875rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        margin-bottom: 0.5rem;
+                      }
+                      .blog-content .info-widget .widget-type {
+                        color: #0ea5e9;
+                      }
+                      .blog-content .warning-widget .widget-type,
+                      .blog-content .caution-widget .widget-type {
+                        color: #f59e0b;
+                      }
+                      .blog-content .success-widget .widget-type,
+                      .blog-content .tip-widget .widget-type {
+                        color: #10b981;
+                      }
+                      .blog-content .error-widget .widget-type,
+                      .blog-content .danger-widget .widget-type {
+                        color: #ef4444;
                       }
                       .blog-content [class*="widget"],
                       .blog-content [class*="w-embed"],
