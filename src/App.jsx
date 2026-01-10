@@ -101,7 +101,7 @@ function VisualEditor({ content, onChange }) {
     Quill.register(ImageBlot);
     quillRef.current = new Quill(editorRef.current, {
       theme: 'snow',
-      modules: { toolbar: [[{ 'header': [1, 2, 3, false] }], ['bold', 'italic', 'underline', 'strike'], [{ 'list': 'ordered'}, { 'list': 'bullet' }], ['link', 'image'], ['clean']] }
+      modules: { toolbar: [[{ 'header': [1, 2, 3, 4, false] }], ['bold', 'italic', 'underline', 'strike'], [{ 'list': 'ordered'}, { 'list': 'bullet' }], ['link', 'image'], ['clean']] }
     });
     const delta = quillRef.current.clipboard.convert(content);
     quillRef.current.setContents(delta, 'silent');
@@ -117,7 +117,7 @@ function VisualEditor({ content, onChange }) {
   }, [content]);
   return (
     <div className="bg-white rounded-lg shadow-xl border border-gray-200">
-      <style>{`.ql-editor img { max-width: 100%; height: auto; display: block; margin: 1rem 0; } .ql-editor h1 { font-size: 2.25rem; font-weight: 700; margin: 2rem 0 1rem 0; } .ql-editor h2 { font-size: 1.875rem; font-weight: 700; margin: 1.75rem 0 1rem 0; } .ql-editor h3 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 0.75rem 0; } .ql-editor table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; border: 1px solid #e5e7eb; } .ql-editor th { background-color: #f3f4f6; padding: 0.75rem; border: 1px solid #e5e7eb; } .ql-editor td { padding: 0.75rem; border: 1px solid #e5e7eb; }`}</style>
+      <style>{`.ql-editor img { max-width: 100%; height: auto; display: block; margin: 1rem 0; } .ql-editor h1 { font-size: 2.25rem; font-weight: 700; margin: 2rem 0 1rem 0; } .ql-editor h2 { font-size: 1.875rem; font-weight: 700; margin: 1.75rem 0 1rem 0; } .ql-editor h3 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 0.75rem 0; } .ql-editor h4 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem 0; } .ql-editor table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; border: 1px solid #e5e7eb; } .ql-editor th { background-color: #f3f4f6; padding: 0.75rem; border: 1px solid #e5e7eb; } .ql-editor td { padding: 0.75rem; border: 1px solid #e5e7eb; }`}</style>
       <div ref={editorRef} style={{ minHeight: '600px' }} />
     </div>
   );
@@ -243,7 +243,7 @@ export default function ContentOps() {
     }
   };
 
-  // FIXED: Better heading formatting
+  // FIXED: Better heading formatting (H1-H4)
   const formatHeading = (level) => {
     if (!afterViewRef.current) return;
     const selection = window.getSelection();
@@ -272,57 +272,6 @@ export default function ContentOps() {
       block.parentNode.replaceChild(heading, block);
       const newRange = document.createRange();
       newRange.selectNodeContents(heading);
-      newRange.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(newRange);
-    }
-    setEditedContent(afterViewRef.current.innerHTML);
-  };
-
-  // NEW: Bullet list support
-  const toggleBulletList = () => {
-    if (!afterViewRef.current) return;
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return;
-    const range = selection.getRangeAt(0);
-    let block = range.startContainer;
-    while (block && block !== afterViewRef.current) {
-      if (block.nodeType === Node.ELEMENT_NODE) {
-        if (block.tagName === 'LI') {
-          const ul = block.parentNode;
-          const textContent = block.textContent;
-          const p = document.createElement('p');
-          p.textContent = textContent;
-          ul.parentNode.replaceChild(p, ul);
-          setEditedContent(afterViewRef.current.innerHTML);
-          return;
-        }
-        if (['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(block.tagName)) {
-          break;
-        }
-      }
-      block = block.parentNode;
-    }
-    if (!block || block === afterViewRef.current) {
-      const ul = document.createElement('ul');
-      const li = document.createElement('li');
-      li.textContent = selection.toString() || 'List item';
-      ul.appendChild(li);
-      range.deleteContents();
-      range.insertNode(ul);
-      const newRange = document.createRange();
-      newRange.selectNodeContents(li);
-      newRange.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(newRange);
-    } else {
-      const ul = document.createElement('ul');
-      const li = document.createElement('li');
-      li.innerHTML = block.innerHTML;
-      ul.appendChild(li);
-      block.parentNode.replaceChild(ul, block);
-      const newRange = document.createRange();
-      newRange.selectNodeContents(li);
       newRange.collapse(false);
       selection.removeAllRanges();
       selection.addRange(newRange);
@@ -706,8 +655,58 @@ export default function ContentOps() {
                         <textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} className="w-full h-[800px] bg-gray-900 text-gray-100 font-mono text-sm p-4 focus:outline-none resize-none" spellCheck="false" />
                       </div>
                       <div className="bg-white rounded-lg border overflow-hidden">
+                        <style>{`
+                          .editable-preview h1 {
+                            font-size: 2.25rem;
+                            font-weight: 700;
+                            margin: 2rem 0 1rem 0;
+                            color: #0f172a;
+                          }
+                          .editable-preview h2 {
+                            font-size: 1.875rem;
+                            font-weight: 700;
+                            margin: 1.75rem 0 1rem 0;
+                            color: #0f172a;
+                          }
+                          .editable-preview h3 {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            margin: 1.5rem 0 0.75rem 0;
+                            color: #1e293b;
+                          }
+                          .editable-preview h4 {
+                            font-size: 1.25rem;
+                            font-weight: 600;
+                            margin: 1.25rem 0 0.5rem 0;
+                            color: #1e293b;
+                          }
+                          .editable-preview img {
+                            max-width: 100%;
+                            height: auto;
+                            display: block;
+                            margin: 1rem 0;
+                          }
+                          .editable-preview table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin: 1.5rem 0;
+                            border: 1px solid #e5e7eb;
+                          }
+                          .editable-preview th {
+                            background-color: #f3f4f6;
+                            padding: 0.75rem;
+                            border: 1px solid #e5e7eb;
+                          }
+                          .editable-preview td {
+                            padding: 0.75rem;
+                            border: 1px solid #e5e7eb;
+                          }
+                          .editable-preview p {
+                            margin: 0.75rem 0;
+                          }
+                        `}</style>
                         <div className="bg-gray-50 px-4 py-2"><span className="text-gray-700 text-xs font-semibold">Preview</span></div>
-                        <div ref={editablePreviewRef} className="text-gray-800 overflow-y-auto p-4" contentEditable={true} suppressContentEditableWarning={true} onInput={handleEditablePreviewInput} onClick={handleContentClick} style={{ height: '800px', outline: 'none' }} />
+                        <div ref={editablePreviewRef} className="editable-preview text-gray-800 overflow-y-auto p-4" contentEditable={true} suppressContentEditableWarning={true} onInput={handleEditablePreviewInput} onClick={handleContentClick} style={{ height: '800px', outline: 'none' }} />
                       </div>
                     </div>
                   )}
@@ -724,6 +723,71 @@ export default function ContentOps() {
                   </div>
                   
                   <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
+                    <style>{`
+                      .blog-content h1 {
+                        font-size: 2.25rem;
+                        line-height: 2.5rem;
+                        font-weight: 700;
+                        margin: 2rem 0 1rem 0;
+                        color: #0f172a;
+                      }
+                      .blog-content h2 {
+                        font-size: 1.875rem;
+                        line-height: 2.25rem;
+                        font-weight: 700;
+                        margin: 1.75rem 0 1rem 0;
+                        color: #0f172a;
+                      }
+                      .blog-content h3 {
+                        font-size: 1.5rem;
+                        line-height: 2rem;
+                        font-weight: 600;
+                        margin: 1.5rem 0 0.75rem 0;
+                        color: #1e293b;
+                      }
+                      .blog-content h4 {
+                        font-size: 1.25rem;
+                        line-height: 1.75rem;
+                        font-weight: 600;
+                        margin: 1.25rem 0 0.5rem 0;
+                        color: #1e293b;
+                      }
+                      .blog-content img {
+                        max-width: 100%;
+                        height: auto;
+                        display: block;
+                        margin: 1rem 0;
+                        cursor: pointer;
+                      }
+                      .blog-content table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 1.5rem 0;
+                        border: 1px solid #e5e7eb;
+                      }
+                      .blog-content th {
+                        background-color: #f3f4f6;
+                        padding: 0.75rem;
+                        border: 1px solid #e5e7eb;
+                        font-weight: 600;
+                      }
+                      .blog-content td {
+                        padding: 0.75rem;
+                        border: 1px solid #e5e7eb;
+                      }
+                      .blog-content p {
+                        margin: 0.75rem 0;
+                        line-height: 1.7;
+                      }
+                      .blog-content ul, .blog-content ol {
+                        margin: 1rem 0;
+                        padding-left: 2rem;
+                      }
+                      .blog-content li {
+                        margin: 0.5rem 0;
+                        line-height: 1.7;
+                      }
+                    `}</style>
                     <div className="text-[#0ea5e9] text-sm font-bold mb-2">📝 EDITABLE CONTENT</div>
                     <div className="flex items-center gap-2 mb-3 p-3 bg-gray-50 border rounded-lg flex-wrap">
                       <button onClick={() => formatText('bold')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 font-bold text-sm" title="Bold">B</button>
@@ -732,8 +796,7 @@ export default function ContentOps() {
                       <button onClick={() => formatHeading(1)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 1">H1</button>
                       <button onClick={() => formatHeading(2)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 2">H2</button>
                       <button onClick={() => formatHeading(3)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 3">H3</button>
-                      <div className="w-px h-6 bg-gray-300"></div>
-                      <button onClick={toggleBulletList} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Bullet List">• List</button>
+                      <button onClick={() => formatHeading(4)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 4">H4</button>
                       <div className="w-px h-6 bg-gray-300"></div>
                       <button onClick={insertLink} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Link">🔗</button>
                       <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Image">🖼️</button>
