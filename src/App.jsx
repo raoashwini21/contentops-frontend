@@ -16,10 +16,16 @@ const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accu
 NEVER USE: Em-dashes, banned words, sentences over 30 words, markdown syntax
 ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong> or <b>)
 **CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
-Return only the complete rewritten HTML content with all images, tables, and widgets preserved exactly as HTML.`;
+- Keep ALL <iframe>, <script>, <embed>, <object>, <video>, <audio>, <canvas>, <form> tags EXACTLY as-is
+- Keep ALL widget classes (w-embed-, w-widget-, info-widget, widget-, etc.) unchanged
+- Keep ALL data attributes (data-*, w-*, webflow-*) unchanged  
+- NEVER convert widgets/embeds to text - keep them as functional HTML
+- NEVER escape HTML in widgets - keep < > characters not &lt; &gt;
+Return only the complete rewritten HTML content with all images, tables, widgets, iframes, scripts, and embeds preserved EXACTLY as HTML with no modifications.`;
 
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  
   const splitIntoBlocks = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
@@ -34,6 +40,7 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
     });
     return blocks;
   };
+  
   const originalBlocks = splitIntoBlocks(originalHTML);
   const updatedBlocks = splitIntoBlocks(updatedHTML);
   const originalMap = new Map();
@@ -43,15 +50,27 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
       originalMap.set(cleaned, { html: block, index: idx });
     }
   });
+  
   let highlightedHTML = '';
   let changesCount = 0;
+  
   updatedBlocks.forEach((updatedBlock) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
+    
+    // Enhanced widget detection - preserve ALL special elements
     const isSpecialElement = 
-      updatedBlock.match(/<(table|iframe|embed|script|img|figure)/i) ||
+      updatedBlock.match(/<(table|iframe|embed|script|img|figure|video|audio|canvas|object|svg|form)/i) ||
       updatedBlock.match(/class="[^"]*widget[^"]*"/i) ||
-      updatedBlock.match(/data-w-id/i);
+      updatedBlock.match(/class="[^"]*w-embed[^"]*"/i) ||
+      updatedBlock.match(/class="[^"]*w-widget[^"]*"/i) ||
+      updatedBlock.match(/class="[^"]*info-widget[^"]*"/i) ||
+      updatedBlock.match(/data-w-id/i) ||
+      updatedBlock.match(/data-widget/i) ||
+      updatedBlock.includes('<script') ||
+      updatedBlock.includes('<iframe') ||
+      updatedBlock.includes('<embed');
+    
     if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
       const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
       highlightedHTML += highlighted;
@@ -60,6 +79,7 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
       highlightedHTML += updatedBlock;
     }
   });
+  
   return { html: highlightedHTML, changesCount };
 };
 
@@ -686,6 +706,25 @@ export default function ContentOps() {
                             display: block;
                             margin: 1rem 0;
                           }
+                          .editable-preview iframe {
+                            max-width: 100%;
+                            width: 100%;
+                            min-height: 400px;
+                            margin: 1.5rem 0;
+                            border: 1px solid #e5e7eb;
+                            border-radius: 8px;
+                          }
+                          .editable-preview embed,
+                          .editable-preview object {
+                            max-width: 100%;
+                            margin: 1.5rem 0;
+                          }
+                          .editable-preview [class*="widget"],
+                          .editable-preview [class*="w-embed"],
+                          .editable-preview [class*="w-widget"] {
+                            margin: 1.5rem 0;
+                            max-width: 100%;
+                          }
                           .editable-preview table {
                             width: 100%;
                             border-collapse: collapse;
@@ -758,6 +797,30 @@ export default function ContentOps() {
                         display: block;
                         margin: 1rem 0;
                         cursor: pointer;
+                      }
+                      .blog-content iframe {
+                        max-width: 100%;
+                        width: 100%;
+                        min-height: 400px;
+                        margin: 1.5rem 0;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                      }
+                      .blog-content embed,
+                      .blog-content object {
+                        max-width: 100%;
+                        margin: 1.5rem 0;
+                      }
+                      .blog-content script {
+                        display: block;
+                      }
+                      .blog-content [class*="widget"],
+                      .blog-content [class*="w-embed"],
+                      .blog-content [class*="w-widget"],
+                      .blog-content [data-w-id],
+                      .blog-content [data-widget] {
+                        margin: 1.5rem 0;
+                        max-width: 100%;
                       }
                       .blog-content table {
                         width: 100%;
