@@ -725,32 +725,32 @@ export default function ContentOps() {
                   <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
                     <style>{`
                       .blog-content h1 {
-                        font-size: 2.25rem;
-                        line-height: 2.5rem;
-                        font-weight: 700;
-                        margin: 2rem 0 1rem 0;
-                        color: #0f172a;
+                        font-size: 2.25rem !important;
+                        line-height: 2.5rem !important;
+                        font-weight: 700 !important;
+                        margin: 2rem 0 1rem 0 !important;
+                        color: #0f172a !important;
                       }
                       .blog-content h2 {
-                        font-size: 1.875rem;
-                        line-height: 2.25rem;
-                        font-weight: 700;
-                        margin: 1.75rem 0 1rem 0;
-                        color: #0f172a;
+                        font-size: 1.875rem !important;
+                        line-height: 2.25rem !important;
+                        font-weight: 700 !important;
+                        margin: 1.75rem 0 1rem 0 !important;
+                        color: #0f172a !important;
                       }
                       .blog-content h3 {
-                        font-size: 1.5rem;
-                        line-height: 2rem;
-                        font-weight: 600;
-                        margin: 1.5rem 0 0.75rem 0;
-                        color: #1e293b;
+                        font-size: 1.5rem !important;
+                        line-height: 2rem !important;
+                        font-weight: 600 !important;
+                        margin: 1.5rem 0 0.75rem 0 !important;
+                        color: #1e293b !important;
                       }
                       .blog-content h4 {
-                        font-size: 1.25rem;
-                        line-height: 1.75rem;
-                        font-weight: 600;
-                        margin: 1.25rem 0 0.5rem 0;
-                        color: #1e293b;
+                        font-size: 1.25rem !important;
+                        line-height: 1.75rem !important;
+                        font-weight: 600 !important;
+                        margin: 1.25rem 0 0.5rem 0 !important;
+                        color: #1e293b !important;
                       }
                       .blog-content img {
                         max-width: 100%;
@@ -801,7 +801,7 @@ export default function ContentOps() {
                       <button onClick={insertLink} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Link">🔗</button>
                       <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Image">🖼️</button>
                     </div>
-                    <div ref={afterViewRef} className="text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]" contentEditable={true} suppressContentEditableWarning={true} onInput={handleAfterViewInput} onClick={handleContentClick} style={{ maxHeight: '800px', outline: 'none', cursor: 'text' }} />
+                    <div ref={afterViewRef} className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]" contentEditable={true} suppressContentEditableWarning={true} onInput={handleAfterViewInput} onClick={handleContentClick} style={{ maxHeight: '800px', outline: 'none', cursor: 'text' }} />
                   </div>
                 </div>
               )}
