@@ -4,56 +4,27 @@ import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp,
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
 const RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
-
 1. Verify ALL claims in the content: pricing, features, stats, company info, technical specs
 2. Use Brave Search strategically: official websites first, 2-3 searches per topic, recent info (2024-2025)
-3. Focus on LinkedIn/SalesRobot specifics:
-   - SalesRobot total users: 4200+
-   - LinkedIn daily limits: 75 connection requests per day (NOT 100/week)
-   - InMails: 40 per day to open profiles without credits
-   - SalesRobot pricing: Basic $59/mo, Advanced $79/mo, Pro $99/mo
-   - AI features: AI Voice Clone, AI Appointment Setter (NOT "AI Inbox Manager"), SalesGPT, Smart Reply Detection
+3. Focus on LinkedIn/SalesRobot specifics
 4. Check for missing AI/NEW features in competitor comparisons
 5. Return structured findings with factChecks and missingFeatures arrays
-
 Be thorough but concise. Focus on accuracy.`;
 
 const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
-
 **CRITICAL WRITING RULES:**
-NEVER USE: Em-dashes, banned words (transform, delve, unleash, revolutionize, meticulous, navigating, realm, bespoke, tailored, autopilot, magic), sentences over 30 words, markdown syntax
-ALWAYS USE: Contractions, active voice, short sentences (15-20 words), direct address, HTML bold tags (<strong> or <b>), proper HTML formatting
-
-**FORMATTING REQUIREMENTS:**
-- Use <strong>text</strong> or <b>text</b> for bold (NEVER use **text** markdown syntax)
-- Use <em>text</em> or <i>text</i> for italics (NEVER use *text* or _text_)
-- All formatting must be valid HTML, no markdown
-
+NEVER USE: Em-dashes, banned words, sentences over 30 words, markdown syntax
+ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong> or <b>)
 **CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
-- Keep ALL <figure> tags with their exact styling and classes
-- Keep ALL <img> tags with their src URLs unchanged
-- Keep ALL <div> wrappers around images
-- Keep ALL <table>, <thead>, <tbody>, <tr>, <td>, <th> tags with all attributes and classes
-- NEVER convert tables to plain text lists or descriptions - keep the exact HTML table structure
-- Keep ALL <iframe>, <script>, <embed> tags (widgets, embeds, calculators, forms)
-- Keep ALL custom Webflow elements (w-richtext-, w-embed-, w-widget-, etc.)
-- Keep ALL custom widget classes (info-widget, widget-type, widget-content, etc.)
-- Keep ALL data attributes (data-*, w-*, webflow-*)
-- Keep ALL "hidden" classes - do not remove them
-- Do NOT remove, modify, simplify, or relocate any images, tables, widgets, or embeds
-- All special elements should stay in their original positions in the content
-
 Return only the complete rewritten HTML content with all images, tables, and widgets preserved exactly as HTML.`;
 
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-  
   const splitIntoBlocks = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
     const container = doc.body.firstChild;
     const blocks = [];
-    
     Array.from(container.childNodes).forEach(node => {
       if (node.nodeType === Node.ELEMENT_NODE) {
         blocks.push(node.outerHTML);
@@ -61,13 +32,10 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
         blocks.push(node.textContent);
       }
     });
-    
     return blocks;
   };
-  
   const originalBlocks = splitIntoBlocks(originalHTML);
   const updatedBlocks = splitIntoBlocks(updatedHTML);
-  
   const originalMap = new Map();
   originalBlocks.forEach((block, idx) => {
     const cleaned = stripHTML(block);
@@ -75,21 +43,15 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
       originalMap.set(cleaned, { html: block, index: idx });
     }
   });
-  
   let highlightedHTML = '';
   let changesCount = 0;
-  
   updatedBlocks.forEach((updatedBlock) => {
     const cleanedUpdated = stripHTML(updatedBlock);
     const match = originalMap.get(cleanedUpdated);
-    
     const isSpecialElement = 
       updatedBlock.match(/<(table|iframe|embed|script|img|figure)/i) ||
       updatedBlock.match(/class="[^"]*widget[^"]*"/i) ||
-      updatedBlock.match(/class="[^"]*w-embed[^"]*"/i) ||
-      updatedBlock.match(/class="[^"]*info-widget[^"]*"/i) ||
       updatedBlock.match(/data-w-id/i);
-    
     if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
       const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
       highlightedHTML += highlighted;
@@ -98,21 +60,18 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
       highlightedHTML += updatedBlock;
     }
   });
-  
   return { html: highlightedHTML, changesCount };
 };
 
 function VisualEditor({ content, onChange }) {
   const editorRef = useRef(null);
   const quillRef = useRef(null);
-
   useEffect(() => {
     if (!window.Quill && !document.querySelector('script[src*="quill"]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
       document.head.appendChild(link);
-
       const script = document.createElement('script');
       script.src = 'https://cdn.quilljs.com/1.3.6/quill.js';
       script.onload = () => initQuill();
@@ -121,7 +80,6 @@ function VisualEditor({ content, onChange }) {
       initQuill();
     }
   }, []);
-
   const initQuill = () => {
     if (!editorRef.current || quillRef.current) return;
     const Quill = window.Quill;
@@ -149,18 +107,14 @@ function VisualEditor({ content, onChange }) {
     quillRef.current.setContents(delta, 'silent');
     quillRef.current.on('text-change', () => { onChange(quillRef.current.root.innerHTML); });
   };
-
   useEffect(() => {
     if (quillRef.current && content !== quillRef.current.root.innerHTML) {
       const cursorPosition = quillRef.current.getSelection();
       const delta = quillRef.current.clipboard.convert(content);
       quillRef.current.setContents(delta, 'silent');
-      if (cursorPosition) {
-        try { quillRef.current.setSelection(cursorPosition); } catch (e) { }
-      }
+      if (cursorPosition) { try { quillRef.current.setSelection(cursorPosition); } catch (e) { } }
     }
   }, [content]);
-
   return (
     <div className="bg-white rounded-lg shadow-xl border border-gray-200">
       <style>{`.ql-editor img { max-width: 100%; height: auto; display: block; margin: 1rem 0; } .ql-editor h1 { font-size: 2.25rem; font-weight: 700; margin: 2rem 0 1rem 0; } .ql-editor h2 { font-size: 1.875rem; font-weight: 700; margin: 1.75rem 0 1rem 0; } .ql-editor h3 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 0.75rem 0; } .ql-editor table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; border: 1px solid #e5e7eb; } .ql-editor th { background-color: #f3f4f6; padding: 0.75rem; border: 1px solid #e5e7eb; } .ql-editor td { padding: 0.75rem; border: 1px solid #e5e7eb; }`}</style>
@@ -220,10 +174,8 @@ export default function ContentOps() {
   useEffect(() => {
     if (afterViewRef.current && viewMode === 'changes') {
       if (showHighlights) {
-        // Show highlights - use the pre-calculated highlighted version
         afterViewRef.current.innerHTML = highlightedData?.html || editedContent;
       } else {
-        // Hide highlights - get current content from DOM and clean it
         const currentContent = afterViewRef.current.innerHTML;
         const cleanedContent = currentContent.replace(
           /<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">(.*?)<\/div>/gs,
@@ -291,10 +243,90 @@ export default function ContentOps() {
     }
   };
 
+  // FIXED: Better heading formatting
   const formatHeading = (level) => {
     if (!afterViewRef.current) return;
-    afterViewRef.current.focus();
-    document.execCommand('formatBlock', false, `<h${level}>`);
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    let block = range.startContainer;
+    while (block && block !== afterViewRef.current) {
+      if (block.nodeType === Node.ELEMENT_NODE && 
+          ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(block.tagName)) {
+        break;
+      }
+      block = block.parentNode;
+    }
+    if (!block || block === afterViewRef.current) {
+      const heading = document.createElement(`h${level}`);
+      heading.textContent = selection.toString() || 'Heading';
+      range.deleteContents();
+      range.insertNode(heading);
+      range.setStartAfter(heading);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      const heading = document.createElement(`h${level}`);
+      heading.innerHTML = block.innerHTML;
+      block.parentNode.replaceChild(heading, block);
+      const newRange = document.createRange();
+      newRange.selectNodeContents(heading);
+      newRange.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(newRange);
+    }
+    setEditedContent(afterViewRef.current.innerHTML);
+  };
+
+  // NEW: Bullet list support
+  const toggleBulletList = () => {
+    if (!afterViewRef.current) return;
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    let block = range.startContainer;
+    while (block && block !== afterViewRef.current) {
+      if (block.nodeType === Node.ELEMENT_NODE) {
+        if (block.tagName === 'LI') {
+          const ul = block.parentNode;
+          const textContent = block.textContent;
+          const p = document.createElement('p');
+          p.textContent = textContent;
+          ul.parentNode.replaceChild(p, ul);
+          setEditedContent(afterViewRef.current.innerHTML);
+          return;
+        }
+        if (['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(block.tagName)) {
+          break;
+        }
+      }
+      block = block.parentNode;
+    }
+    if (!block || block === afterViewRef.current) {
+      const ul = document.createElement('ul');
+      const li = document.createElement('li');
+      li.textContent = selection.toString() || 'List item';
+      ul.appendChild(li);
+      range.deleteContents();
+      range.insertNode(ul);
+      const newRange = document.createRange();
+      newRange.selectNodeContents(li);
+      newRange.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(newRange);
+    } else {
+      const ul = document.createElement('ul');
+      const li = document.createElement('li');
+      li.innerHTML = block.innerHTML;
+      ul.appendChild(li);
+      block.parentNode.replaceChild(ul, block);
+      const newRange = document.createRange();
+      newRange.selectNodeContents(li);
+      newRange.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(newRange);
+    }
     setEditedContent(afterViewRef.current.innerHTML);
   };
 
@@ -693,16 +725,18 @@ export default function ContentOps() {
                   
                   <div className="bg-white rounded-xl p-6 border-2 border-[#0ea5e9] shadow-lg">
                     <div className="text-[#0ea5e9] text-sm font-bold mb-2">📝 EDITABLE CONTENT</div>
-                    <div className="flex items-center gap-2 mb-3 p-3 bg-gray-50 border rounded-lg">
-                      <button onClick={() => formatText('bold')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 font-bold text-sm">B</button>
-                      <button onClick={() => formatText('italic')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 italic text-sm">I</button>
+                    <div className="flex items-center gap-2 mb-3 p-3 bg-gray-50 border rounded-lg flex-wrap">
+                      <button onClick={() => formatText('bold')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 font-bold text-sm" title="Bold">B</button>
+                      <button onClick={() => formatText('italic')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 italic text-sm" title="Italic">I</button>
                       <div className="w-px h-6 bg-gray-300"></div>
-                      <button onClick={() => formatHeading(1)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold">H1</button>
-                      <button onClick={() => formatHeading(2)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold">H2</button>
-                      <button onClick={() => formatHeading(3)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm">H3</button>
+                      <button onClick={() => formatHeading(1)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 1">H1</button>
+                      <button onClick={() => formatHeading(2)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 2">H2</button>
+                      <button onClick={() => formatHeading(3)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 3">H3</button>
                       <div className="w-px h-6 bg-gray-300"></div>
-                      <button onClick={insertLink} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm">🔗</button>
-                      <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm">🖼️</button>
+                      <button onClick={toggleBulletList} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Bullet List">• List</button>
+                      <div className="w-px h-6 bg-gray-300"></div>
+                      <button onClick={insertLink} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Link">🔗</button>
+                      <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Image">🖼️</button>
                     </div>
                     <div ref={afterViewRef} className="text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]" contentEditable={true} suppressContentEditableWarning={true} onInput={handleAfterViewInput} onClick={handleContentClick} style={{ maxHeight: '800px', outline: 'none', cursor: 'text' }} />
                   </div>
@@ -775,6 +809,26 @@ export default function ContentOps() {
           </div>
         </div>
       )}
+
+      <footer className="bg-[#0f172a] text-white mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#0ea5e9] rounded-lg flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <div className="text-xl font-bold">ContentOps</div>
+                <div className="text-gray-400 text-xs">by SalesRobot</div>
+              </div>
+            </div>
+            <div className="text-center md:text-right">
+              <p className="text-gray-400 text-sm">© 2025 ContentOps. All rights reserved.</p>
+              <p className="text-gray-500 text-xs mt-1">Powered by Brave Search + Claude AI</p>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
