@@ -737,11 +737,11 @@ export default function ContentOps() {
                             padding: 1.5rem;
                             border-radius: 6px;
                           }
-                          /* Style info-widget boxes (blue) */
+                          /* Style info-widget boxes (purple/indigo) */
                           .editable-preview .info-widget,
                           .editable-preview [class*="info-widget"] {
-                            background-color: #f0f9ff;
-                            border-left: 4px solid #0ea5e9;
+                            background-color: #f5f3ff;
+                            border-left: 4px solid #8b5cf6;
                           }
                           /* Style warning/caution widgets (yellow/orange) */
                           .editable-preview .warning-widget,
@@ -895,11 +895,11 @@ export default function ContentOps() {
                         padding: 1.5rem;
                         border-radius: 6px;
                       }
-                      /* Style info-widget boxes (blue) */
+                      /* Style info-widget boxes (purple/indigo) */
                       .blog-content .info-widget,
                       .blog-content [class*="info-widget"] {
-                        background-color: #f0f9ff;
-                        border-left: 4px solid #0ea5e9;
+                        background-color: #f5f3ff;
+                        border-left: 4px solid #8b5cf6;
                       }
                       /* Style warning/caution widgets (yellow/orange) */
                       .blog-content .warning-widget,
@@ -933,7 +933,7 @@ export default function ContentOps() {
                         margin: 0 0 0.75rem 0;
                       }
                       .blog-content .info-widget [class*="heading"] {
-                        color: #0ea5e9;
+                        color: #8b5cf6;
                       }
                       .blog-content .warning-widget [class*="heading"],
                       .blog-content .caution-widget [class*="heading"] {
@@ -968,7 +968,7 @@ export default function ContentOps() {
                         margin-bottom: 0.5rem;
                       }
                       .blog-content .info-widget .widget-type {
-                        color: #0ea5e9;
+                        color: #8b5cf6;
                       }
                       .blog-content .warning-widget .widget-type,
                       .blog-content .caution-widget .widget-type {
