@@ -3,13 +3,71 @@ import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp,
 
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
-const RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
+// BOFU Research Prompt (Comparison, Reviews, Alternatives, Pricing)
+const BOFU_RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
 1. Verify ALL claims in the content: pricing, features, stats, company info, technical specs
 2. Use Brave Search strategically: official websites first, 2-3 searches per topic, recent info (2024-2025)
 3. Focus on LinkedIn/SalesRobot specifics
 4. Check for missing AI/NEW features in competitor comparisons
 5. Return structured findings with factChecks and missingFeatures arrays
 Be thorough but concise. Focus on accuracy.`;
+
+// TOFU Research Prompt (Educational, Awareness, General Info)
+const TOFU_RESEARCH_PROMPT = `You are a professional fact-checker for educational content. Your job is to:
+1. Verify general industry claims and statistics about LinkedIn, sales automation, and B2B outreach
+2. Use Brave Search to check: industry trends (2024-2025), best practices from authoritative sources, general statistics
+3. Focus on educational accuracy: LinkedIn platform stats, general limits/policies, industry benchmarks, common best practices
+4. Verify definitions, terminology, and conceptual explanations
+5. Check recent trends and developments in the space
+Be thorough but focus on educational accuracy, not product specifics. Return structured findings with factChecks array.`;
+
+// MOFU Research Prompt (Consideration, How-To, Frameworks)
+const MOFU_RESEARCH_PROMPT = `You are a professional fact-checker for consideration-stage content. Your job is to:
+1. Verify framework claims, methodologies, and strategic guidance
+2. Use Brave Search to check: use case examples, industry comparisons, solution categories, implementation best practices
+3. Focus on buyer guidance: "how to choose" criteria, solution category definitions, implementation timelines, use case validation
+4. Check authoritative sources for recommendations and guidance
+5. Balance general information with solution category comparisons
+Be thorough and balanced. Focus on helping buyers make informed decisions. Return structured findings with factChecks array.`;
+
+// Auto-detect blog type from title
+const detectBlogType = (title) => {
+  const titleLower = title.toLowerCase();
+  
+  // BOFU keywords (comparison, alternatives, reviews, pricing)
+  const bofuKeywords = ['vs ', ' vs.', 'versus', 'alternative', 'alternatives', 'review', 'pricing', 'comparison', 'compare', 'better than', 'or ', 'which is better', 'worth it', 'pros and cons'];
+  
+  // TOFU keywords (educational, awareness, general info)
+  const tofuKeywords = ['what is', 'what are', 'why', 'top 10', 'top 5', 'tips', 'guide to', 'introduction', 'beginner', 'basics', 'explained', 'definition', 'ultimate guide', 'complete guide'];
+  
+  // MOFU keywords (consideration, how-to, frameworks)
+  const mofuKeywords = ['how to', 'best practices', 'getting started', 'choosing', 'selecting', 'framework', 'strategy', 'guide for', 'steps to', 'ways to', 'mistakes to avoid', 'should you', 'when to use'];
+  
+  // Check for BOFU
+  if (bofuKeywords.some(keyword => titleLower.includes(keyword))) {
+    return 'BOFU';
+  }
+  
+  // Check for TOFU
+  if (tofuKeywords.some(keyword => titleLower.includes(keyword))) {
+    return 'TOFU';
+  }
+  
+  // Check for MOFU
+  if (mofuKeywords.some(keyword => titleLower.includes(keyword))) {
+    return 'MOFU';
+  }
+  
+  // Default: if contains numbers/lists, likely TOFU; otherwise MOFU
+  if (/\d+/.test(titleLower) && (titleLower.includes('tips') || titleLower.includes('ways'))) {
+    return 'TOFU';
+  }
+  
+  // Default to MOFU (safest middle ground)
+  return 'MOFU';
+};
+
+const RESEARCH_PROMPT = BOFU_RESEARCH_PROMPT; // Kept for backwards compatibility
 
 const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
 **CRITICAL WRITING RULES:**
@@ -490,6 +548,25 @@ export default function ContentOps() {
   const analyzeBlog = async (blog) => {
     setSelectedBlog(blog);
     setLoading(true);
+    
+    // Auto-detect blog type from title
+    const blogTitle = blog.fieldData.name;
+    const blogType = detectBlogType(blogTitle);
+    
+    // Select appropriate research prompt based on blog type
+    let selectedResearchPrompt;
+    let blogTypeLabel;
+    if (blogType === 'BOFU') {
+      selectedResearchPrompt = BOFU_RESEARCH_PROMPT;
+      blogTypeLabel = 'BOFU (Comparison/Review)';
+    } else if (blogType === 'TOFU') {
+      selectedResearchPrompt = TOFU_RESEARCH_PROMPT;
+      blogTypeLabel = 'TOFU (Educational)';
+    } else {
+      selectedResearchPrompt = MOFU_RESEARCH_PROMPT;
+      blogTypeLabel = 'MOFU (How-To/Guide)';
+    }
+    
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
     const fullOriginalContent = blog.fieldData['post-body'] || '';
     try {
@@ -498,10 +575,10 @@ export default function ContentOps() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           blogContent: fullOriginalContent,
-          title: blog.fieldData.name,
+          title: blogTitle,
           anthropicKey: config.anthropicKey,
           braveKey: config.braveKey,
-          researchPrompt: RESEARCH_PROMPT,
+          researchPrompt: selectedResearchPrompt,
           writingPrompt: WRITING_PROMPT
         })
       });
@@ -521,7 +598,8 @@ export default function ContentOps() {
         sectionsUpdated: data.sectionsUpdated || 0,
         content: updatedContent,
         originalContent: fullOriginalContent,
-        duration: data.duration || 0
+        duration: data.duration || 0,
+        blogType: blogType
       });
       setEditedContent(updatedContent);
       setShowHighlights(true);
