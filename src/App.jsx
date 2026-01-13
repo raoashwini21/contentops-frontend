@@ -528,24 +528,58 @@ export default function ContentOps() {
     fetchBlogs();
   };
 
-  const fetchBlogs = async () => {
-    setLoading(true);
-    setStatus({ type: 'info', message: 'Fetching blogs...' });
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}`, {
-        headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'accept': 'application/json' }
-      });
-      if (!response.ok) throw new Error('Failed to fetch blogs');
+ const fetchBlogs = async () => {
+  setLoading(true);
+  setStatus({ type: 'info', message: 'Fetching all blogs...' });
+
+  try {
+    const allItems = [];
+    const limit = 100;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await fetch(
+        `${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&limit=${limit}&offset=${offset}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${config.webflowKey}`,
+            'accept': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed at offset ${offset}`);
+      }
+
       const data = await response.json();
-      setBlogs(data.items || []);
-      setStatus({ type: 'success', message: `Found ${data.items?.length || 0} blog posts` });
-      setView('dashboard');
-    } catch (error) {
-      setStatus({ type: 'error', message: error.message });
-    } finally {
-      setLoading(false);
+      const items = data.items || [];
+
+      allItems.push(...items);
+
+      // Stop when fewer than limit returned
+      if (items.length < limit) {
+        hasMore = false;
+      } else {
+        offset += limit;
+      }
     }
-  };
+
+    setBlogs(allItems);
+    setStatus({
+      type: 'success',
+      message: `Found ${allItems.length} blog posts`
+    });
+    setView('dashboard');
+
+  } catch (error) {
+    setStatus({ type: 'error', message: error.message });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const analyzeBlog = async (blog) => {
     setSelectedBlog(blog);
