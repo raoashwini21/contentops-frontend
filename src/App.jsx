@@ -263,6 +263,11 @@ export default function ContentOps() {
   const [showHighlights, setShowHighlights] = useState(true);
   const [blogTitle, setBlogTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [blogsPerPage] = useState(20);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(50);
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -573,15 +578,39 @@ export default function ContentOps() {
 
   const fetchBlogs = async () => {
     setLoading(true);
-    setStatus({ type: 'info', message: 'Fetching blogs...' });
+    setStatus({ type: 'info', message: 'Fetching all blogs...' });
     try {
-      const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}`, {
-        headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'accept': 'application/json' }
-      });
-      if (!response.ok) throw new Error('Failed to fetch blogs');
-      const data = await response.json();
-      setBlogs(data.items || []);
-      setStatus({ type: 'success', message: `Found ${data.items?.length || 0} blog posts` });
+      let allBlogs = [];
+      let offset = 0;
+      const limit = 100; // Webflow returns max 100 per request
+      let hasMore = true;
+      
+      // Paginate through all blogs
+      while (hasMore) {
+        const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&offset=${offset}&limit=${limit}`, {
+          headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'accept': 'application/json' }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch blogs');
+        
+        const data = await response.json();
+        const items = data.items || [];
+        
+        allBlogs = [...allBlogs, ...items];
+        
+        // Check if there are more blogs to fetch
+        if (items.length < limit) {
+          hasMore = false; // Last page
+        } else {
+          offset += limit;
+          setStatus({ type: 'info', message: `Fetching blogs... (${allBlogs.length} loaded)` });
+        }
+      }
+      
+      setBlogs(allBlogs);
+      setVisibleCount(50); // Reset to show first 50
+      setSearchQuery(''); // Clear search
+      setStatus({ type: 'success', message: `✅ Found ${allBlogs.length} blog posts` });
       setView('dashboard');
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -616,9 +645,39 @@ export default function ContentOps() {
       blogTypeLabel = 'MOFU (How-To/Guide)';
     }
     
-    setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
+    // Progress indicator
+    let progressInterval;
+    let elapsedSeconds = 0;
+    
+    const updateProgress = () => {
+      elapsedSeconds += 5;
+      if (elapsedSeconds <= 20) {
+        setStatus({ type: 'info', message: `🔍 Researching facts... (${elapsedSeconds}s)` });
+      } else if (elapsedSeconds <= 40) {
+        setStatus({ type: 'info', message: `✍️ Rewriting content... (${elapsedSeconds}s)` });
+      } else if (elapsedSeconds <= 60) {
+        setStatus({ type: 'info', message: `🎨 Finalizing changes... (${elapsedSeconds}s)` });
+      } else {
+        setStatus({ type: 'info', message: `⏳ Still processing... (${elapsedSeconds}s) - Large blog detected` });
+      }
+    };
+    
+    // Update progress every 5 seconds
+    progressInterval = setInterval(updateProgress, 5000);
+    updateProgress(); // Initial message
+    
+    // Prevent accidental navigation during analysis
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Analysis in progress. Are you sure you want to leave?';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
     const fullOriginalContent = blog.fieldData['post-body'] || '';
+    
     try {
+      // No timeout - let it run as long as needed
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -631,6 +690,10 @@ export default function ContentOps() {
           writingPrompt: WRITING_PROMPT
         })
       });
+      
+      clearInterval(progressInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Analysis failed');
@@ -652,12 +715,22 @@ export default function ContentOps() {
       });
       setEditedContent(updatedContent);
       setShowHighlights(true);
-      setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${highlighted.changesCount} changes` });
+      setStatus({ type: 'success', message: `✅ Complete in ${elapsedSeconds}s! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${highlighted.changesCount} changes` });
       setView('review');
       setViewMode('changes');
     } catch (error) {
-      setStatus({ type: 'error', message: error.message });
+      clearInterval(progressInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      
+      setStatus({ 
+        type: 'error', 
+        message: `❌ Failed after ${elapsedSeconds}s: ${error.message}. Check backend logs or try a shorter blog.` 
+      });
+      // Don't navigate away - stay on current view so user can see error and retry
+      console.error('Analysis error:', error);
     } finally {
+      clearInterval(progressInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       setLoading(false);
     }
   };
@@ -746,29 +819,161 @@ export default function ContentOps() {
 
         {view === 'dashboard' && (
           <div>
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-3xl font-bold text-[#0f172a]">Your Blog Posts</h2>
               <button onClick={fetchBlogs} disabled={loading} className="bg-white text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 border hover:bg-gray-50"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
             </div>
+            
+            {/* Search Bar */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search blogs by title..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1); // Reset to first page on search
+                  }}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                />
+              </div>
+              {(() => {
+                const filtered = blogs.filter(blog => 
+                  blog.fieldData.name.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+                return (
+                  <p className="text-sm text-gray-600 mt-2">
+                    {searchQuery ? `Found ${filtered.length} matching blogs` : `Total: ${blogs.length} blogs`}
+                  </p>
+                );
+              })()}
+            </div>
+            
             {loading ? (
               <div className="text-center py-12"><Loader className="w-12 h-12 text-[#0ea5e9] animate-spin mx-auto mb-4" /><p className="text-gray-600">Loading...</p></div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {blogs.map(blog => (
-                  <div key={blog.id} className="bg-white rounded-xl p-6 border shadow-sm hover:shadow-md transition-all">
-                    <h3 className="font-semibold text-[#0f172a] mb-2 line-clamp-2">{blog.fieldData.name}</h3>
-                    <p className="text-sm text-gray-600 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
-                    <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-[#0ea5e9] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7] disabled:opacity-50">{loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : '⚡ Smart Check'}</button>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {(() => {
+                    // Filter blogs based on search
+                    const filtered = blogs.filter(blog => 
+                      blog.fieldData.name.toLowerCase().includes(searchQuery.toLowerCase())
+                    );
+                    
+                    // Calculate pagination
+                    const indexOfLastBlog = currentPage * blogsPerPage;
+                    const indexOfFirstBlog = indexOfLastBlog - blogsPerPage;
+                    const currentBlogs = filtered.slice(indexOfFirstBlog, indexOfLastBlog);
+                    
+                    return currentBlogs.map(blog => (
+                      <div key={blog.id} className="bg-white rounded-xl p-6 border shadow-sm hover:shadow-md transition-all">
+                        <h3 className="font-semibold text-[#0f172a] mb-2 line-clamp-2">{blog.fieldData.name}</h3>
+                        <p className="text-sm text-gray-600 mb-4 line-clamp-3">{blog.fieldData['post-summary'] || 'No description'}</p>
+                        <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-[#0ea5e9] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7] disabled:opacity-50">{loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : '⚡ Smart Check'}</button>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                
+                {/* Pagination */}
+                {(() => {
+                  const filtered = blogs.filter(blog => 
+                    blog.fieldData.name.toLowerCase().includes(searchQuery.toLowerCase())
+                  );
+                  const totalPages = Math.ceil(filtered.length / blogsPerPage);
+                  
+                  if (totalPages <= 1) return null;
+                  
+                  const pageNumbers = [];
+                  const maxVisiblePages = 7;
+                  
+                  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                  
+                  if (endPage - startPage < maxVisiblePages - 1) {
+                    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                  }
+                  
+                  for (let i = startPage; i <= endPage; i++) {
+                    pageNumbers.push(i);
+                  }
+                  
+                  return (
+                    <div className="flex items-center justify-center gap-2 mt-8">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        «
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ‹
+                      </button>
+                      
+                      {startPage > 1 && (
+                        <>
+                          <button onClick={() => setCurrentPage(1)} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50">1</button>
+                          {startPage > 2 && <span className="px-2">...</span>}
+                        </>
+                      )}
+                      
+                      {pageNumbers.map(number => (
+                        <button
+                          key={number}
+                          onClick={() => setCurrentPage(number)}
+                          className={`px-3 py-2 rounded-lg border ${
+                            currentPage === number
+                              ? 'bg-[#0ea5e9] text-white'
+                              : 'bg-white hover:bg-gray-50'
+                          }`}
+                        >
+                          {number}
+                        </button>
+                      ))}
+                      
+                      {endPage < totalPages && (
+                        <>
+                          {endPage < totalPages - 1 && <span className="px-2">...</span>}
+                          <button onClick={() => setCurrentPage(totalPages)} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50">{totalPages}</button>
+                        </>
+                      )}
+                      
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ›
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        »
+                      </button>
+                      
+                      <span className="ml-4 text-sm text-gray-600">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </>
             )}
             {status.message && (
               <div className={`mt-6 p-4 rounded-lg flex items-center gap-2 ${status.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
                 {status.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600" />}
                 {status.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600" />}
                 {status.type === 'info' && <Loader className="w-5 h-5 text-blue-600 animate-spin" />}
-                <p className={`text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</p>
+                <p className="text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</p>
               </div>
             )}
           </div>
