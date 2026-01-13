@@ -5,30 +5,50 @@ const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
 // BOFU Research Prompt (Comparison, Reviews, Alternatives, Pricing)
 const BOFU_RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
-1. Verify ALL claims in the content: pricing, features, stats, company info, technical specs
+1. Verify ALL claims in the content: pricing, features, stats, company info, technical specs FOR ALL COMPANIES/TOOLS mentioned
 2. Use Brave Search strategically: official websites first, 2-3 searches per topic, recent info (2024-2025)
-3. Focus on LinkedIn/SalesRobot specifics
-4. Check for missing AI/NEW features in competitor comparisons
-5. Return structured findings with factChecks and missingFeatures arrays
-Be thorough but concise. Focus on accuracy.`;
+3. Update ALL incorrect facts found via Brave Search:
+   - Competitor pricing (Expandi, Dripify, LinkedHelper, etc.) - verify and update
+   - LinkedIn platform limits and policies - verify exact numbers
+   - Industry statistics and benchmarks - update with latest data
+   - Product features for ALL tools mentioned - not just SalesRobot
+   - Company information (founding dates, team size, users) for ALL companies
+4. SalesRobot-specific reference facts (use these if mentioned):
+   - SalesRobot users: 4200+
+   - LinkedIn connection requests: 75 per day (NOT 100/week)
+   - InMails: 40 per day to open profiles
+   - SalesRobot pricing: Basic $59/mo, Advanced $79/mo, Pro $99/mo
+5. CRITICAL: When Brave Search finds different facts than the blog, UPDATE THE BLOG with Brave's facts
+6. Return structured findings with factChecks array showing OLD value vs NEW value for every correction
+Be thorough. Update EVERY incorrect fact you find, not just SalesRobot content.`;
 
 // TOFU Research Prompt (Educational, Awareness, General Info)
 const TOFU_RESEARCH_PROMPT = `You are a professional fact-checker for educational content. Your job is to:
-1. Verify general industry claims and statistics about LinkedIn, sales automation, and B2B outreach
+1. Verify ALL general industry claims and statistics about LinkedIn, sales automation, and B2B outreach
 2. Use Brave Search to check: industry trends (2024-2025), best practices from authoritative sources, general statistics
-3. Focus on educational accuracy: LinkedIn platform stats, general limits/policies, industry benchmarks, common best practices
+3. UPDATE ALL INCORRECT FACTS with information from Brave Search:
+   - LinkedIn platform statistics and usage data (verify exact numbers)
+   - General LinkedIn limits and policies (verify current limits)
+   - Industry benchmarks and standards (update with latest data)
+   - Common best practices and methodologies (verify from authoritative sources)
 4. Verify definitions, terminology, and conceptual explanations
-5. Check recent trends and developments in the space
-Be thorough but focus on educational accuracy, not product specifics. Return structured findings with factChecks array.`;
+5. Check recent trends and developments in the space (2024-2025 data)
+6. CRITICAL: When Brave Search finds different facts, UPDATE THE BLOG with correct information
+Be thorough but focus on educational accuracy. Update EVERY incorrect fact with Brave Search findings. Return structured findings with factChecks array.`;
 
 // MOFU Research Prompt (Consideration, How-To, Frameworks)
 const MOFU_RESEARCH_PROMPT = `You are a professional fact-checker for consideration-stage content. Your job is to:
-1. Verify framework claims, methodologies, and strategic guidance
+1. Verify ALL framework claims, methodologies, and strategic guidance
 2. Use Brave Search to check: use case examples, industry comparisons, solution categories, implementation best practices
-3. Focus on buyer guidance: "how to choose" criteria, solution category definitions, implementation timelines, use case validation
+3. UPDATE ALL INCORRECT FACTS with information from Brave Search:
+   - "How to choose" criteria and frameworks (verify from expert sources)
+   - Solution category definitions and distinctions (update with current info)
+   - Implementation timelines and resource requirements (verify realistic estimates)
+   - Use case examples and success metrics (verify from case studies)
 4. Check authoritative sources for recommendations and guidance
 5. Balance general information with solution category comparisons
-Be thorough and balanced. Focus on helping buyers make informed decisions. Return structured findings with factChecks array.`;
+6. CRITICAL: When Brave Search finds different information, UPDATE THE BLOG with correct data
+Be thorough and balanced. Focus on helping buyers make informed decisions. Update EVERY incorrect fact with Brave Search findings. Return structured findings with factChecks array.`;
 
 // Auto-detect blog type from title
 const detectBlogType = (title) => {
@@ -70,18 +90,41 @@ const detectBlogType = (title) => {
 const RESEARCH_PROMPT = BOFU_RESEARCH_PROMPT; // Kept for backwards compatibility
 
 const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
+
 **CRITICAL WRITING RULES:**
 NEVER USE: Em-dashes, banned words, sentences over 30 words, markdown syntax
 ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong> or <b>)
+
+**AI WORDS TO AVOID (use simpler alternatives):**
+NEVER use: tangible, seamless, robust, leverage, utilize, facilitate, enhance, streamline, optimize, revolutionize, transform, cutting-edge, state-of-the-art, game-changer, paradigm, synergy, ecosystem, holistic, comprehensive, innovative, groundbreaking, empower, unlock, harness, delve, meticulously, intricacies, realm, landscape, foster, cultivate, endeavor, underscore, pivotal, crucial, vital, paramount, quintessential, multifaceted
+INSTEAD use: real, smooth, strong, use, help, improve, simplify, better, change, advanced, new, important, key, complex, area, field, support, grow, try, highlight, key, essential, important, many-sided
+
+**FORMATTING REQUIREMENTS:**
+- Use <strong>text</strong> or <b>text</b> for bold (NEVER use **text** markdown syntax)
+- Use <em>text</em> or <i>text</i> for italics (NEVER use *text* or _text_)
+- All formatting must be valid HTML, no markdown
+
+**CRITICAL: APPLY ALL BRAVE SEARCH CORRECTIONS**
+- When research shows different pricing → UPDATE with correct pricing
+- When research shows different features → UPDATE with correct features  
+- When research shows different statistics → UPDATE with correct numbers
+- When research shows different company info → UPDATE with correct info
+- Update EVERY fact that Brave Search found to be incorrect
+- This applies to ALL companies/tools mentioned, not just SalesRobot
+
 **CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
 - Keep ALL <iframe>, <script>, <embed>, <object>, <video>, <audio>, <canvas>, <form> tags EXACTLY as-is
+- Keep ALL <img> tags with their src, alt, title, and ALL other attributes EXACTLY as-is
+- NEVER remove or modify alt attributes on images - preserve them exactly
 - Keep ALL widget classes (w-embed-, w-widget-, info-widget, widget-, etc.) unchanged
 - Keep ALL data attributes (data-*, w-*, webflow-*) unchanged
 - Keep the "hidden" class on widget elements - DO NOT remove it
 - Keep ALL widget structure and nested elements intact (widget-type, info-widget-heading, info-widget-content, etc.)
+- Keep ALL <ul>, <ol>, <li> list elements EXACTLY as-is with proper HTML structure
 - NEVER convert widgets/embeds to text - keep them as functional HTML
 - NEVER escape HTML in widgets - keep < > characters not &lt; &gt;
-Return only the complete rewritten HTML content with all images, tables, widgets, iframes, scripts, and embeds preserved EXACTLY as HTML with no modifications.`;
+
+Return only the complete rewritten HTML content with ALL FACTS CORRECTED based on Brave Search findings, and all images (with alt text), tables, widgets, iframes, scripts, lists, and embeds preserved EXACTLY as HTML with no modifications.`;
 
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
   const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
@@ -218,6 +261,8 @@ export default function ContentOps() {
   const [highlightedData, setHighlightedData] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1 });
   const [showHighlights, setShowHighlights] = useState(true);
+  const [blogTitle, setBlogTitle] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -553,6 +598,10 @@ export default function ContentOps() {
     const blogTitle = blog.fieldData.name;
     const blogType = detectBlogType(blogTitle);
     
+    // Initialize title and meta description from blog data
+    setBlogTitle(blog.fieldData.name || '');
+    setMetaDescription(blog.fieldData['meta-description'] || blog.fieldData['post-summary'] || '');
+    
     // Select appropriate research prompt based on blog type
     let selectedResearchPrompt;
     let blogTypeLabel;
@@ -623,9 +672,10 @@ export default function ContentOps() {
         headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'Content-Type': 'application/json', 'accept': 'application/json' },
         body: JSON.stringify({
           fieldData: {
-            name: selectedBlog.fieldData.name,
+            name: blogTitle,
             'post-body': editedContent,
-            'post-summary': selectedBlog.fieldData['post-summary']
+            'post-summary': selectedBlog.fieldData['post-summary'],
+            'meta-description': metaDescription
           }
         })
       });
@@ -737,6 +787,32 @@ export default function ContentOps() {
                 <div className="flex gap-2">
                   <button onClick={() => setViewMode('changes')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${viewMode === 'changes' ? 'bg-[#0ea5e9] text-white' : 'bg-gray-100'}`}>✨ Diff</button>
                   <button onClick={() => setViewMode('edit')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${viewMode === 'edit' ? 'bg-[#0ea5e9] text-white' : 'bg-gray-100'}`}>✏️ Edit</button>
+                </div>
+              </div>
+
+              {/* Title and Meta Description Fields */}
+              <div className="space-y-4 mb-6 pb-6 border-b">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">📝 Blog Title</label>
+                  <input 
+                    type="text" 
+                    value={blogTitle} 
+                    onChange={(e) => setBlogTitle(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent"
+                    placeholder="Enter blog title..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">📄 Meta Description</label>
+                  <textarea 
+                    value={metaDescription} 
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent resize-none"
+                    rows="3"
+                    placeholder="Enter meta description (recommended: 150-160 characters)..."
+                    maxLength="160"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">{metaDescription.length}/160 characters</div>
                 </div>
               </div>
 
