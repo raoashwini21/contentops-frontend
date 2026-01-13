@@ -582,9 +582,13 @@ export default function ContentOps() {
       let offset = 0;
       const limit = 100; // Webflow returns max 100 per request
       let hasMore = true;
+      let requestCount = 0;
+      const maxRequests = 20; // Safety limit: stop after 20 requests (2000 blogs max)
       
       // Paginate through all blogs
-      while (hasMore) {
+      while (hasMore && requestCount < maxRequests) {
+        requestCount++;
+        
         const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&offset=${offset}&limit=${limit}`, {
           headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'accept': 'application/json' }
         });
@@ -594,11 +598,17 @@ export default function ContentOps() {
         const data = await response.json();
         const items = data.items || [];
         
+        // Stop if we got no items (empty response)
+        if (items.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
         allBlogs = [...allBlogs, ...items];
         
         // Check if there are more blogs to fetch
         if (items.length < limit) {
-          hasMore = false; // Last page
+          hasMore = false; // Last page - got less than 100 items
         } else {
           offset += limit;
           setStatus({ type: 'info', message: `Fetching blogs... (${allBlogs.length} loaded)` });
@@ -606,8 +616,8 @@ export default function ContentOps() {
       }
       
       setBlogs(allBlogs);
-      setVisibleCount(50); // Reset to show first 50
       setSearchQuery(''); // Clear search
+      setCurrentPage(1); // Reset to first page
       setStatus({ type: 'success', message: `✅ Found ${allBlogs.length} blog posts` });
       setView('dashboard');
     } catch (error) {
