@@ -266,8 +266,6 @@ export default function ContentOps() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [blogsPerPage] = useState(20);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [visibleCount, setVisibleCount] = useState(50);
   const editablePreviewRef = useRef(null);
   const afterViewRef = useRef(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -973,7 +971,7 @@ export default function ContentOps() {
                 {status.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600" />}
                 {status.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600" />}
                 {status.type === 'info' && <Loader className="w-5 h-5 text-blue-600 animate-spin" />}
-                <p className="text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</p>
+                <p className={`text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</p>
               </div>
             )}
           </div>
