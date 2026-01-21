@@ -70,9 +70,21 @@ const detectBlogType = (title) => {
 const RESEARCH_PROMPT = BOFU_RESEARCH_PROMPT; // Kept for backwards compatibility
 
 const WRITING_PROMPT = `You are an expert blog rewriter focused on clarity, accuracy, and engagement.
+
 **CRITICAL WRITING RULES:**
 NEVER USE: Em-dashes, banned words, sentences over 30 words, markdown syntax
 ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong> or <b>)
+
+**CRITICAL: PRESERVE ALL FORMATTING AND STRUCTURE EXACTLY**
+- Keep ALL heading tags (<h1>, <h2>, <h3>, <h4>, <h5>, <h6>) EXACTLY as they are in the original
+- Keep ALL heading hierarchy the same - do NOT change H2 to H3, or H3 to H2, etc.
+- Keep ALL heading text the same unless it contains factual errors
+- Keep ALL bold (<strong>, <b>) and italic (<em>, <i>) formatting EXACTLY as-is
+- Keep ALL links (<a> tags) EXACTLY as-is - preserve href, target, and all attributes
+- Keep ALL paragraph breaks and spacing EXACTLY as they appear in original
+- Keep ALL list structures (<ul>, <ol>, <li>) EXACTLY as-is
+- Keep ALL class attributes, IDs, and data attributes unchanged
+
 **CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
 - Keep ALL <iframe>, <script>, <embed>, <object>, <video>, <audio>, <canvas>, <form> tags EXACTLY as-is
 - Keep ALL widget classes (w-embed-, w-widget-, info-widget, widget-, etc.) unchanged
@@ -81,44 +93,87 @@ ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong
 - Keep ALL widget structure and nested elements intact (widget-type, info-widget-heading, info-widget-content, etc.)
 - NEVER convert widgets/embeds to text - keep them as functional HTML
 - NEVER escape HTML in widgets - keep < > characters not &lt; &gt;
-Return only the complete rewritten HTML content with all images, tables, widgets, iframes, scripts, and embeds preserved EXACTLY as HTML with no modifications.`;
 
+**WHAT YOU CAN CHANGE:**
+- Fix factual errors (pricing, features, statistics, dates)
+- Remove em-dashes and replace with regular dashes or commas
+- Shorten overly long sentences (30+ words)
+- Add contractions where natural
+- Convert passive voice to active voice
+- Bold important terms using <strong> tags
+
+**WHAT YOU CANNOT CHANGE:**
+- Heading levels (H1, H2, H3, etc.)
+- Paragraph structure and breaks
+- List formatting (bullet vs numbered)
+- Any HTML structure or nesting
+- Widget or embed code
+- Image tags or attributes
+
+Return only the complete rewritten HTML content with all images, tables, widgets, iframes, scripts, embeds, and EXACT heading structure preserved with no modifications to formatting.`;
+
+// IMPROVED HIGHLIGHTING LOGIC - Only highlights real content changes
 const createHighlightedHTML = (originalHTML, updatedHTML) => {
-  const stripHTML = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  // ULTRA-AGGRESSIVE normalization - strip EVERYTHING except actual words
+  const normalizeForComparison = (html) => {
+    return html
+      .replace(/<[^>]+>/g, ' ') // Remove ALL HTML tags
+      .replace(/&[a-z]+;/gi, ' ') // Replace HTML entities
+      .replace(/[^\w\s]/g, ' ') // Remove all punctuation
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim()
+      .toLowerCase(); // Case insensitive
+  };
   
+  // Split into blocks
   const splitIntoBlocks = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
     const container = doc.body.firstChild;
     const blocks = [];
-    Array.from(container.childNodes).forEach(node => {
+    
+    const processNode = (node) => {
       if (node.nodeType === Node.ELEMENT_NODE) {
-        blocks.push(node.outerHTML);
+        const tagName = node.tagName.toUpperCase();
+        const isBlockElement = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'SECTION', 'ARTICLE'].includes(tagName);
+        const isSpecialElement = ['TABLE', 'IFRAME', 'EMBED', 'SCRIPT', 'IMG', 'FIGURE', 'VIDEO', 'AUDIO', 'CANVAS', 'OBJECT', 'SVG', 'FORM'].includes(tagName);
+        
+        if (isBlockElement || isSpecialElement) {
+          blocks.push(node.outerHTML);
+        } else {
+          Array.from(node.childNodes).forEach(processNode);
+        }
       } else if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
         blocks.push(node.textContent);
       }
-    });
+    };
+    
+    Array.from(container.childNodes).forEach(processNode);
     return blocks;
   };
   
   const originalBlocks = splitIntoBlocks(originalHTML);
   const updatedBlocks = splitIntoBlocks(updatedHTML);
+  
+  // Create normalized map
   const originalMap = new Map();
   originalBlocks.forEach((block, idx) => {
-    const cleaned = stripHTML(block);
-    if (cleaned && cleaned.length > 5) {
-      originalMap.set(cleaned, { html: block, index: idx });
+    const normalized = normalizeForComparison(block);
+    if (normalized && normalized.length > 10) {
+      if (!originalMap.has(normalized)) {
+        originalMap.set(normalized, []);
+      }
+      originalMap.get(normalized).push({ html: block, index: idx, used: false });
     }
   });
   
   let highlightedHTML = '';
   let changesCount = 0;
   
-  updatedBlocks.forEach((updatedBlock) => {
-    const cleanedUpdated = stripHTML(updatedBlock);
-    const match = originalMap.get(cleanedUpdated);
+  updatedBlocks.forEach((updatedBlock, blockIdx) => {
+    const normalizedUpdated = normalizeForComparison(updatedBlock);
     
-    // Enhanced widget detection - preserve ALL special elements
+    // Check if special element (never highlight these)
     const isSpecialElement = 
       updatedBlock.match(/<(table|iframe|embed|script|img|figure|video|audio|canvas|object|svg|form)/i) ||
       updatedBlock.match(/class="[^"]*widget[^"]*"/i) ||
@@ -126,18 +181,75 @@ const createHighlightedHTML = (originalHTML, updatedHTML) => {
       updatedBlock.match(/class="[^"]*w-embed[^"]*"/i) ||
       updatedBlock.match(/class="[^"]*w-widget[^"]*"/i) ||
       updatedBlock.match(/data-w-id/i) ||
-      updatedBlock.match(/data-widget/i) ||
-      updatedBlock.includes('<script') ||
-      updatedBlock.includes('<iframe') ||
-      updatedBlock.includes('<embed');
+      updatedBlock.match(/data-widget/i);
     
-    if (!match && cleanedUpdated.length > 20 && !isSpecialElement) {
-      const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
-      highlightedHTML += highlighted;
-      changesCount++;
-    } else {
+    if (isSpecialElement) {
       highlightedHTML += updatedBlock;
+      return;
     }
+    
+    // Look for exact normalized match
+    const matchingBlocks = originalMap.get(normalizedUpdated);
+    if (matchingBlocks && matchingBlocks.length > 0) {
+      // Find first unused match
+      const match = matchingBlocks.find(m => !m.used);
+      if (match) {
+        match.used = true;
+        highlightedHTML += updatedBlock;
+        return;
+      }
+    }
+    
+    // No exact match - check for fuzzy match (95% word overlap OR less than 5 different words)
+    if (normalizedUpdated.length > 20) {
+      let foundSimilar = false;
+      const updatedWords = normalizedUpdated.split(/\s+/).filter(w => w.length > 3);
+      const updatedWordSet = new Set(updatedWords);
+      
+      if (updatedWordSet.size > 0) {
+        for (const [origNormalized, origBlocks] of originalMap.entries()) {
+          const unusedBlock = origBlocks.find(b => !b.used);
+          if (!unusedBlock) continue;
+          
+          const origWords = origNormalized.split(/\s+/).filter(w => w.length > 3);
+          const origWordSet = new Set(origWords);
+          if (origWordSet.size === 0) continue;
+          
+          // Count matching words
+          let matchCount = 0;
+          updatedWordSet.forEach(word => {
+            if (origWordSet.has(word)) matchCount++;
+          });
+          
+          // Calculate similarity
+          const totalWords = Math.max(updatedWordSet.size, origWordSet.size);
+          const similarity = matchCount / totalWords;
+          
+          // Count different words
+          const differentWords = updatedWords.filter(w => !origWordSet.has(w)).length;
+          
+          // STRICT: Need 95% similarity OR less than 3 different substantive words
+          if (similarity >= 0.95 || differentWords < 3) {
+            // Just minor changes, don't highlight
+            foundSimilar = true;
+            unusedBlock.used = true;
+            highlightedHTML += updatedBlock;
+            return;
+          }
+        }
+      }
+      
+      if (!foundSimilar) {
+        // Real content change - highlight it
+        const highlighted = `<div style="background-color: #e0f2fe; padding: 8px; margin: 8px 0; border-left: 3px solid #0ea5e9; border-radius: 4px;">${updatedBlock}</div>`;
+        highlightedHTML += highlighted;
+        changesCount++;
+        return;
+      }
+    }
+    
+    // Default: no highlight
+    highlightedHTML += updatedBlock;
   });
   
   return { html: highlightedHTML, changesCount };
@@ -205,7 +317,12 @@ function VisualEditor({ content, onChange }) {
 
 export default function ContentOps() {
   const [view, setView] = useState('home');
-  const [config, setConfig] = useState({ anthropicKey: '', braveKey: '', webflowKey: '', collectionId: '' });
+  const [config, setConfig] = useState({ 
+    anthropicKey: '', 
+    braveKey: '', 
+    webflowKey: '', 
+    collectionId: '' 
+  });
   const [savedConfig, setSavedConfig] = useState(null);
   const [blogs, setBlogs] = useState([]);
   const [selectedBlog, setSelectedBlog] = useState(null);
@@ -227,6 +344,9 @@ export default function ContentOps() {
   const [imageUrl, setImageUrl] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [savedSelection, setSavedSelection] = useState(null);
+  const [blogTitle, setBlogTitle] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
+  const [metaFieldName, setMetaFieldName] = useState('post-summary'); // Track which field to use
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -359,6 +479,48 @@ export default function ContentOps() {
     setEditedContent(afterViewRef.current.innerHTML);
   };
 
+  const formatList = (type) => {
+    if (!afterViewRef.current) return;
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    
+    const range = selection.getRangeAt(0);
+    let block = range.startContainer;
+    
+    // Find the nearest block element
+    while (block && block !== afterViewRef.current) {
+      if (block.nodeType === Node.ELEMENT_NODE && 
+          ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(block.tagName)) {
+        break;
+      }
+      block = block.parentNode;
+    }
+    
+    if (!block || block === afterViewRef.current) return;
+    
+    // Check if already in a list
+    const parentList = block.closest('ul, ol');
+    if (parentList) {
+      // Already in a list - unwrap it
+      const fragment = document.createDocumentFragment();
+      Array.from(parentList.children).forEach(li => {
+        const p = document.createElement('p');
+        p.innerHTML = li.innerHTML;
+        fragment.appendChild(p);
+      });
+      parentList.parentNode.replaceChild(fragment, parentList);
+    } else {
+      // Create new list
+      const listElement = document.createElement(type === 'bullet' ? 'ul' : 'ol');
+      const li = document.createElement('li');
+      li.innerHTML = block.innerHTML;
+      listElement.appendChild(li);
+      block.parentNode.replaceChild(listElement, block);
+    }
+    
+    setEditedContent(afterViewRef.current.innerHTML);
+  };
+
   const insertLink = () => {
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
@@ -488,7 +650,12 @@ export default function ContentOps() {
     const images = doc.querySelectorAll('img');
     if (images[imageAltModal.index]) {
       images[imageAltModal.index].setAttribute('alt', imageAltModal.currentAlt);
-      setEditedContent(doc.body.innerHTML);
+      const newContent = doc.body.innerHTML;
+      setEditedContent(newContent);
+      // Update the DOM immediately
+      if (afterViewRef.current) {
+        afterViewRef.current.innerHTML = newContent;
+      }
     }
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
   };
@@ -585,6 +752,46 @@ export default function ContentOps() {
     
     // Auto-detect blog type from title
     const blogTitle = blog.fieldData.name;
+    setBlogTitle(blogTitle);
+    
+    // Try multiple common field names for meta description and store which one worked
+    const fieldChecks = [
+      'excerpt',
+      'post-summary', 
+      'summary',
+      'meta-description',
+      'description',
+      'seo-description'
+    ];
+    
+    let metaDescriptionValue = '';
+    let detectedFieldName = 'post-summary'; // default
+    
+    for (const fieldName of fieldChecks) {
+      if (blog.fieldData[fieldName]) {
+        metaDescriptionValue = blog.fieldData[fieldName];
+        detectedFieldName = fieldName;
+        console.log(`✓ Found meta description in field: "${fieldName}"`);
+        break;
+      }
+    }
+    
+    setMetaDescription(metaDescriptionValue);
+    setMetaFieldName(detectedFieldName);
+    
+    // Debug logging to see available fields
+    console.log('=== WEBFLOW FIELD DETECTION ===');
+    console.log('All available fields:', Object.keys(blog.fieldData));
+    console.log('Field values:');
+    Object.entries(blog.fieldData).forEach(([key, value]) => {
+      if (typeof value === 'string' && value.length > 0) {
+        console.log(`  ${key}: ${value.substring(0, 50)}${value.length > 50 ? '...' : ''}`);
+      }
+    });
+    console.log('Meta description field used:', detectedFieldName);
+    console.log('Meta description value:', metaDescriptionValue ? metaDescriptionValue.substring(0, 100) : '(empty)');
+    console.log('===============================');
+    
     const blogType = detectBlogType(blogTitle);
     
     // Select appropriate research prompt based on blog type
@@ -603,6 +810,16 @@ export default function ContentOps() {
     
     setStatus({ type: 'info', message: 'Smart analysis in progress (15-20s)...' });
     const fullOriginalContent = blog.fieldData['post-body'] || '';
+    
+    // Debug: Check for links in original content
+    const linkMatches = fullOriginalContent.match(/<a\s+[^>]*href=/gi);
+    console.log('=== LINK DETECTION ===');
+    console.log(`Found ${linkMatches ? linkMatches.length : 0} links in original Webflow content`);
+    if (linkMatches && linkMatches.length > 0) {
+      console.log('Sample links:', fullOriginalContent.match(/<a\s+[^>]*>.*?<\/a>/gi)?.slice(0, 3));
+    }
+    console.log('======================');
+    
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
         method: 'POST',
@@ -623,6 +840,12 @@ export default function ContentOps() {
       const data = await response.json();
       let updatedContent = data.content || fullOriginalContent;
       updatedContent = updatedContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      
+      // Count links in updated content
+      const updatedLinkMatches = updatedContent.match(/<a\s+[^>]*href=/gi);
+      const linkCount = updatedLinkMatches ? updatedLinkMatches.length : 0;
+      console.log(`Links preserved in updated content: ${linkCount}`);
+      
       const highlighted = createHighlightedHTML(fullOriginalContent, updatedContent);
       setHighlightedData(highlighted);
       setResult({
@@ -633,11 +856,12 @@ export default function ContentOps() {
         content: updatedContent,
         originalContent: fullOriginalContent,
         duration: data.duration || 0,
-        blogType: blogType
+        blogType: blogType,
+        linkCount: linkCount
       });
       setEditedContent(updatedContent);
       setShowHighlights(true);
-      setStatus({ type: 'success', message: `✅ Complete! ${data.searchesUsed} searches, ${data.claudeCalls} rewrites, ${highlighted.changesCount} changes` });
+      setStatus({ type: 'success', message: `✅ Analysis complete!` });
       setView('review');
       setViewMode('changes');
     } catch (error) {
@@ -649,27 +873,114 @@ export default function ContentOps() {
 
   const publishToWebflow = async () => {
     if (!result || !selectedBlog) return;
+    
+    // Validation
+    if (!blogTitle.trim()) {
+      setStatus({ type: 'error', message: 'Title cannot be empty' });
+      return;
+    }
+    
+    if (!editedContent.trim()) {
+      setStatus({ type: 'error', message: 'Content cannot be empty' });
+      return;
+    }
+    
     setLoading(true);
-    setStatus({ type: 'info', message: 'Publishing...' });
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&itemId=${selectedBlog.id}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'Content-Type': 'application/json', 'accept': 'application/json' },
-        body: JSON.stringify({
-          fieldData: {
-            name: selectedBlog.fieldData.name,
-            'post-body': editedContent,
-            'post-summary': selectedBlog.fieldData['post-summary']
+    setStatus({ type: 'info', message: 'Publishing to Webflow...' });
+    
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        attempt++;
+        
+        if (attempt > 1) {
+          setStatus({ type: 'info', message: `Retrying... (Attempt ${attempt}/${maxRetries})` });
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+        }
+        
+        console.log('Publishing to Webflow:', {
+          collectionId: config.collectionId,
+          itemId: selectedBlog.id,
+          titleLength: blogTitle.length,
+          contentLength: editedContent.length,
+          metaLength: metaDescription.length,
+          metaFieldName: metaFieldName
+        });
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        // Build fieldData with the correct meta description field name
+        const fieldData = {
+          name: blogTitle.trim(),
+          'post-body': editedContent
+        };
+        
+        // Add meta description to the correct field
+        if (metaDescription.trim()) {
+          fieldData[metaFieldName] = metaDescription.trim();
+        }
+        
+        const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&itemId=${selectedBlog.id}`, {
+          method: 'PATCH',
+          headers: { 
+            'Authorization': `Bearer ${config.webflowKey}`, 
+            'Content-Type': 'application/json', 
+            'accept': 'application/json' 
+          },
+          body: JSON.stringify({ fieldData }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const responseData = await response.json();
+        console.log('Webflow response:', responseData);
+        
+        if (!response.ok) {
+          throw new Error(responseData.error || responseData.message || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Success!
+        setStatus({ type: 'success', message: '✅ Published successfully!' });
+        setView('success');
+        setLoading(false);
+        return;
+        
+      } catch (error) {
+        console.error(`Publish attempt ${attempt} failed:`, error);
+        
+        // Handle timeout specifically
+        if (error.name === 'AbortError') {
+          console.error('Request timed out after 30 seconds');
+          if (attempt === maxRetries) {
+            setStatus({ 
+              type: 'error', 
+              message: 'Request timed out. Your content might be too large or Webflow is slow to respond.' 
+            });
+            setLoading(false);
+            return;
           }
-        })
-      });
-      if (!response.ok) throw new Error('Failed to publish');
-      setStatus({ type: 'success', message: '✅ Published successfully!' });
-      setView('success');
-    } catch (error) {
-      setStatus({ type: 'error', message: error.message });
-    } finally {
-      setLoading(false);
+          continue;
+        }
+        
+        if (attempt === maxRetries) {
+          // Final attempt failed
+          const errorMessage = error.message || 'Unknown error occurred';
+          setStatus({ 
+            type: 'error', 
+            message: `Failed to publish after ${maxRetries} attempts: ${errorMessage}` 
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // Continue to next retry
+        continue;
+      }
     }
   };
 
@@ -704,7 +1015,7 @@ export default function ContentOps() {
                 <span className="text-[#0ea5e9] text-sm font-semibold">Powered by Brave Search + Claude AI</span>
               </div>
               <h1 className="text-6xl font-bold text-[#0f172a] mb-4">Smart Content<br /><span className="text-[#0ea5e9]">Fact-Checking</span></h1>
-              <p className="text-xl text-gray-600">Pure Brave research • AI-powered rewrites • Full blog diff view</p>
+              <p className="text-xl text-gray-600">Brave Search • AI-powered rewrites • Full blog diff view</p>
             </div>
             <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="bg-[#0ea5e9] text-white px-10 py-4 rounded-lg text-lg font-bold hover:bg-[#0284c7] shadow-lg">
               {savedConfig ? 'Go to Dashboard →' : 'Get Started →'}
@@ -718,7 +1029,9 @@ export default function ContentOps() {
               <h2 className="text-3xl font-bold text-[#0f172a] mb-6">Configuration</h2>
               <div className="space-y-4">
                 <div><label className="block text-sm font-semibold mb-2">Claude API Key</label><input type="password" value={config.anthropicKey} onChange={(e) => setConfig({...config, anthropicKey: e.target.value})} placeholder="sk-ant-..." className="w-full bg-gray-50 border rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" /></div>
+                
                 <div><label className="block text-sm font-semibold mb-2">Brave Search API Key</label><input type="password" value={config.braveKey} onChange={(e) => setConfig({...config, braveKey: e.target.value})} placeholder="BSA..." className="w-full bg-gray-50 border rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" /></div>
+                
                 <div><label className="block text-sm font-semibold mb-2">Webflow API Token</label><input type="password" value={config.webflowKey} onChange={(e) => setConfig({...config, webflowKey: e.target.value})} placeholder="Token" className="w-full bg-gray-50 border rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" /></div>
                 <div><label className="block text-sm font-semibold mb-2">Collection ID</label><input type="text" value={config.collectionId} onChange={(e) => setConfig({...config, collectionId: e.target.value})} placeholder="From Webflow CMS" className="w-full bg-gray-50 border rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" /></div>
                 <button onClick={saveConfig} disabled={loading} className="w-full bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50">{loading ? 'Saving...' : 'Save & Continue'}</button>
@@ -760,180 +1073,74 @@ export default function ContentOps() {
 
         {view === 'review' && result && (
           <div className="space-y-6">
-            <div className="bg-gradient-to-r from-[#0ea5e9] to-[#06b6d4] rounded-xl p-8 text-white shadow-lg">
-              <h2 className="text-3xl font-bold mb-2">✅ Analysis Complete!</h2>
-              <p className="text-blue-50">{result.searchesUsed} searches • {highlightedData?.changesCount || 0} changes</p>
+            {/* Title and Meta Description Editor */}
+            <div className="bg-white rounded-xl p-6 border shadow-lg">
+              <h3 className="text-xl font-bold text-[#0f172a] mb-4">📋 SEO Metadata</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
+                  <input 
+                    type="text" 
+                    value={blogTitle} 
+                    onChange={(e) => setBlogTitle(e.target.value)}
+                    className="w-full bg-gray-50 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                    placeholder="Blog post title"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{blogTitle.length} characters</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-semibold text-gray-700">Meta Description</label>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      Field: {metaFieldName}
+                    </span>
+                  </div>
+                  <textarea 
+                    value={metaDescription} 
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    className="w-full bg-gray-50 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
+                    rows="3"
+                    placeholder="Brief description for search engines"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{metaDescription.length} characters</p>
+                  {!metaDescription && (
+                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <p className="text-xs text-yellow-800 font-semibold mb-1">⚠️ No meta description found</p>
+                      <p className="text-xs text-yellow-700 mb-2">
+                        The field "<strong>{metaFieldName}</strong>" is empty in Webflow. 
+                        Open browser console (F12) to see all available fields or add a description manually here.
+                      </p>
+                      <button 
+                        onClick={() => {
+                          console.log('=== MANUAL FIELD CHECK ===');
+                          console.log('Available fields:', Object.keys(selectedBlog.fieldData));
+                          console.log('Current field being used:', metaFieldName);
+                          console.log('All field values:');
+                          Object.entries(selectedBlog.fieldData).forEach(([key, value]) => {
+                            if (typeof value === 'string') {
+                              console.log(`  ${key}: ${value.substring(0, 100)}${value.length > 100 ? '...' : ''}`);
+                            }
+                          });
+                          alert('Check browser console (F12) for field details');
+                        }}
+                        className="text-xs bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700"
+                      >
+                        📋 Show All Fields in Console
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="bg-white rounded-xl p-6 border shadow-lg">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-[#0f172a]">📄 Content Review</h3>
-                <div className="flex gap-2">
-                  <button onClick={() => setViewMode('changes')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${viewMode === 'changes' ? 'bg-[#0ea5e9] text-white' : 'bg-gray-100'}`}>✨ Diff</button>
-                  <button onClick={() => setViewMode('edit')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${viewMode === 'edit' ? 'bg-[#0ea5e9] text-white' : 'bg-gray-100'}`}>✏️ Edit</button>
-                </div>
+                <h3 className="text-2xl font-bold text-[#0f172a]">📄 Content Editor</h3>
               </div>
-
-              {viewMode === 'edit' && (
-                <div className="space-y-4">
-                  <div className="flex gap-2 mb-4">
-                    <button onClick={() => setEditMode('visual')} className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${editMode === 'visual' ? 'bg-[#0ea5e9] text-white' : 'bg-gray-100'}`}><Eye className="w-4 h-4" />Visual</button>
-                    <button onClick={() => setEditMode('html')} className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${editMode === 'html' ? 'bg-[#0ea5e9] text-white' : 'bg-gray-100'}`}><Code className="w-4 h-4" />HTML</button>
-                  </div>
-                  {editMode === 'visual' ? (
-                    <VisualEditor content={editedContent} onChange={setEditedContent} />
-                  ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <div className="bg-gray-900 rounded-lg overflow-hidden">
-                        <div className="bg-gray-800 px-4 py-2"><span className="text-gray-300 text-xs font-semibold">HTML</span></div>
-                        <textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} className="w-full h-[800px] bg-gray-900 text-gray-100 font-mono text-sm p-4 focus:outline-none resize-none" spellCheck="false" />
-                      </div>
-                      <div className="bg-white rounded-lg border overflow-hidden">
-                        <style>{`
-                          .editable-preview h1 {
-                            font-size: 2.25rem;
-                            font-weight: 700;
-                            margin: 2rem 0 1rem 0;
-                            color: #0f172a;
-                          }
-                          .editable-preview h2 {
-                            font-size: 1.875rem;
-                            font-weight: 700;
-                            margin: 1.75rem 0 1rem 0;
-                            color: #0f172a;
-                          }
-                          .editable-preview h3 {
-                            font-size: 1.5rem;
-                            font-weight: 600;
-                            margin: 1.5rem 0 0.75rem 0;
-                            color: #1e293b;
-                          }
-                          .editable-preview h4 {
-                            font-size: 1.25rem;
-                            font-weight: 600;
-                            margin: 1.25rem 0 0.5rem 0;
-                            color: #1e293b;
-                          }
-                          .editable-preview img {
-                            max-width: 100%;
-                            height: auto;
-                            display: block;
-                            margin: 1rem 0;
-                          }
-                          .editable-preview iframe {
-                            max-width: 100%;
-                            width: 100%;
-                            min-height: 400px;
-                            margin: 1.5rem 0;
-                            border: 1px solid #e5e7eb;
-                            border-radius: 8px;
-                          }
-                          .editable-preview embed,
-                          .editable-preview object {
-                            max-width: 100%;
-                            margin: 1.5rem 0;
-                          }
-                          /* Override hidden class for widget content */
-                          .editable-preview .info-widget .hidden,
-                          .editable-preview [class*="widget"] .hidden,
-                          .editable-preview [class*="-widget"] .hidden,
-                          .editable-preview [class*="w-embed"] .hidden,
-                          .editable-preview [class*="w-widget"] .hidden {
-                            display: block !important;
-                            visibility: visible !important;
-                          }
-                          /* Generic styling for ALL widget types */
-                          .editable-preview [class*="-widget"],
-                          .editable-preview [class*="widget-"] {
-                            margin: 1.5rem 0;
-                            padding: 1.5rem;
-                            border-radius: 6px;
-                          }
-                          /* Style info-widget boxes (purple/indigo) */
-                          .editable-preview .info-widget,
-                          .editable-preview [class*="info-widget"] {
-                            background-color: #f5f3ff;
-                            border-left: 4px solid #8b5cf6;
-                          }
-                          /* Style warning/caution widgets (yellow/orange) */
-                          .editable-preview .warning-widget,
-                          .editable-preview .caution-widget,
-                          .editable-preview [class*="warning-widget"],
-                          .editable-preview [class*="caution-widget"] {
-                            background-color: #fef3c7;
-                            border-left: 4px solid #f59e0b;
-                          }
-                          /* Style success/tip widgets (green) */
-                          .editable-preview .success-widget,
-                          .editable-preview .tip-widget,
-                          .editable-preview [class*="success-widget"],
-                          .editable-preview [class*="tip-widget"] {
-                            background-color: #d1fae5;
-                            border-left: 4px solid #10b981;
-                          }
-                          /* Style error/danger widgets (red) */
-                          .editable-preview .error-widget,
-                          .editable-preview .danger-widget,
-                          .editable-preview [class*="error-widget"],
-                          .editable-preview [class*="danger-widget"] {
-                            background-color: #fee2e2;
-                            border-left: 4px solid #ef4444;
-                          }
-                          /* Generic widget heading styles */
-                          .editable-preview [class*="widget-heading"],
-                          .editable-preview [class*="-widget-heading"] {
-                            font-size: 1.125rem;
-                            font-weight: 600;
-                            margin: 0 0 0.75rem 0;
-                          }
-                          /* Widget type labels */
-                          .editable-preview .widget-type,
-                          .editable-preview [class*="widget-type"] {
-                            display: inline-block;
-                            font-size: 0.875rem;
-                            font-weight: 600;
-                            text-transform: uppercase;
-                            letter-spacing: 0.05em;
-                            margin-bottom: 0.5rem;
-                          }
-                          .editable-preview [class*="widget"],
-                          .editable-preview [class*="w-embed"],
-                          .editable-preview [class*="w-widget"] {
-                            margin: 1.5rem 0;
-                            max-width: 100%;
-                          }
-                          .editable-preview table {
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin: 1.5rem 0;
-                            border: 1px solid #e5e7eb;
-                          }
-                          .editable-preview th {
-                            background-color: #f3f4f6;
-                            padding: 0.75rem;
-                            border: 1px solid #e5e7eb;
-                          }
-                          .editable-preview td {
-                            padding: 0.75rem;
-                            border: 1px solid #e5e7eb;
-                          }
-                          .editable-preview p {
-                            margin: 0.75rem 0;
-                          }
-                        `}</style>
-                        <div className="bg-gray-50 px-4 py-2"><span className="text-gray-700 text-xs font-semibold">Preview</span></div>
-                        <div ref={editablePreviewRef} className="editable-preview text-gray-800 overflow-y-auto p-4" contentEditable={true} suppressContentEditableWarning={true} onInput={handleEditablePreviewInput} onClick={handleContentClick} style={{ height: '800px', outline: 'none' }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {viewMode === 'changes' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-1 mr-3">
-                      <p className="text-blue-800 text-sm">✨ <span className="font-semibold">Edit directly!</span> {showHighlights && <span>• <span className="font-semibold">{highlightedData?.changesCount || 0} changes</span> shown</span>}</p>
+                      <p className="text-blue-800 text-sm">✨ <span className="font-semibold">Edit directly!</span> {showHighlights && highlightedData?.changesCount > 0 && <span>• <span className="font-semibold">{highlightedData?.changesCount} real content {highlightedData?.changesCount === 1 ? 'change' : 'changes'}</span> highlighted</span>}</p>
                     </div>
                     <button onClick={() => setShowHighlights(!showHighlights)} className={`px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap ${showHighlights ? 'bg-blue-500 text-white' : 'bg-white border'}`}>{showHighlights ? '✨ Hide' : '👁️ Show'}</button>
                   </div>
@@ -1126,23 +1333,47 @@ export default function ContentOps() {
                         margin: 1rem 0;
                         padding-left: 2rem;
                       }
+                      .blog-content ul {
+                        list-style-type: disc;
+                      }
+                      .blog-content ol {
+                        list-style-type: decimal;
+                      }
                       .blog-content li {
                         margin: 0.5rem 0;
                         line-height: 1.7;
+                        display: list-item;
+                      }
+                      .blog-content a {
+                        color: #0ea5e9;
+                        text-decoration: underline;
+                        cursor: pointer;
+                      }
+                      .blog-content a:hover {
+                        color: #0284c7;
+                        text-decoration: underline;
                       }
                     `}</style>
                     <div className="text-[#0ea5e9] text-sm font-bold mb-2">📝 EDITABLE CONTENT</div>
-                    <div className="flex items-center gap-2 mb-3 p-3 bg-gray-50 border rounded-lg flex-wrap">
-                      <button onClick={() => formatText('bold')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 font-bold text-sm" title="Bold">B</button>
-                      <button onClick={() => formatText('italic')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 italic text-sm" title="Italic">I</button>
-                      <div className="w-px h-6 bg-gray-300"></div>
-                      <button onClick={() => formatHeading(1)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 1">H1</button>
-                      <button onClick={() => formatHeading(2)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 2">H2</button>
-                      <button onClick={() => formatHeading(3)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 3">H3</button>
-                      <button onClick={() => formatHeading(4)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 4">H4</button>
-                      <div className="w-px h-6 bg-gray-300"></div>
-                      <button onClick={insertLink} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Link">🔗</button>
-                      <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Image">🖼️</button>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 border rounded-lg flex-wrap flex-1">
+                        <button onClick={() => formatText('bold')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 font-bold text-sm" title="Bold">B</button>
+                        <button onClick={() => formatText('italic')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 italic text-sm" title="Italic">I</button>
+                        <div className="w-px h-6 bg-gray-300"></div>
+                        <button onClick={() => formatHeading(1)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 1">H1</button>
+                        <button onClick={() => formatHeading(2)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm font-bold" title="Heading 2">H2</button>
+                        <button onClick={() => formatHeading(3)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 3">H3</button>
+                        <button onClick={() => formatHeading(4)} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Heading 4">H4</button>
+                        <div className="w-px h-6 bg-gray-300"></div>
+                        <button onClick={() => formatList('bullet')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Bullet List">• List</button>
+                        <button onClick={() => formatList('numbered')} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Numbered List">1. List</button>
+                        <div className="w-px h-6 bg-gray-300"></div>
+                        <button onClick={insertLink} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Link">🔗</button>
+                        <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Image">🖼️</button>
+                      </div>
+                      <div className="ml-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700 whitespace-nowrap">
+                        💡 Tip: Ctrl+Click links to open
+                      </div>
                     </div>
                     <div ref={afterViewRef} className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]" contentEditable={true} suppressContentEditableWarning={true} onInput={handleAfterViewInput} onClick={handleContentClick} style={{ maxHeight: '800px', outline: 'none', cursor: 'text' }} />
                   </div>
@@ -1152,8 +1383,56 @@ export default function ContentOps() {
             
             <div className="flex gap-4">
               <button onClick={() => setView('dashboard')} className="flex-1 bg-gray-100 text-gray-700 py-4 rounded-lg font-semibold hover:bg-gray-200">← Cancel</button>
-              <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-[#0ea5e9] text-white py-4 px-8 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50 flex items-center gap-2 shadow-lg">{loading ? <><Loader className="w-5 h-5 animate-spin" />Publishing...</> : <><CheckCircle className="w-5 h-5" />Publish</>}</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    setStatus({ type: 'info', message: 'Testing connection...' });
+                    const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&itemId=${selectedBlog.id}`, {
+                      headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'accept': 'application/json' }
+                    });
+                    if (response.ok) {
+                      setStatus({ type: 'success', message: '✅ Connection OK! Ready to publish.' });
+                    } else {
+                      setStatus({ type: 'error', message: '❌ Connection failed. Check API token.' });
+                    }
+                  } catch (err) {
+                    setStatus({ type: 'error', message: '❌ Network error: ' + err.message });
+                  }
+                }}
+                className="flex-1 bg-gray-600 text-white py-4 rounded-lg font-semibold hover:bg-gray-700"
+              >
+                Test Connection
+              </button>
+              <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-[#0ea5e9] text-white py-4 px-8 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg">{loading ? <><Loader className="w-5 h-5 animate-spin" />{status.message.includes('Retry') ? status.message : 'Publishing...'}</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}</button>
             </div>
+            
+            {/* Error/Status Display */}
+            {status.message && status.type === 'error' && (
+              <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-bold text-red-900 mb-2">Publishing Failed</h4>
+                    <p className="text-red-800 text-sm mb-3">{status.message}</p>
+                    <div className="bg-white border border-red-200 rounded-lg p-3 text-xs">
+                      <p className="font-semibold text-red-900 mb-2">Troubleshooting:</p>
+                      <ul className="list-disc list-inside space-y-1 text-red-700">
+                        <li>Check your Webflow API token is valid</li>
+                        <li>Verify the blog post exists in Webflow</li>
+                        <li>Try refreshing and analyzing the blog again</li>
+                        <li>Content might be too large (over 500KB)</li>
+                      </ul>
+                    </div>
+                    <button 
+                      onClick={publishToWebflow} 
+                      className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
