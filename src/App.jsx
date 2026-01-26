@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye } from 'lucide-react';
 
-const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
+const BACKEND_URL = 'https://test-backend-production-f29b.up.railway.app';
 
 // BOFU Research Prompt (Comparison, Reviews, Alternatives, Pricing)
 const BOFU_RESEARCH_PROMPT = `You are a professional fact-checker and researcher. Your job is to:
@@ -340,6 +340,7 @@ export default function ContentOps() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [linkText, setLinkText] = useState('');
   const [editingLink, setEditingLink] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
   const [imageFile, setImageFile] = useState(null);
@@ -385,6 +386,19 @@ export default function ContentOps() {
       }
     }
   }, [viewMode, showHighlights, highlightedData]);
+
+  // Ensure all links in editable area are clickable
+  useEffect(() => {
+    if (afterViewRef.current) {
+      const links = afterViewRef.current.querySelectorAll('a');
+      links.forEach(link => {
+        link.style.color = '#0ea5e9';
+        link.style.textDecoration = 'underline';
+        link.style.cursor = 'pointer';
+        link.style.pointerEvents = 'auto';
+      });
+    }
+  }, [editedContent, viewMode]);
 
   const handleEditablePreviewInput = () => {
     if (editablePreviewRef.current) {
@@ -530,6 +544,7 @@ export default function ContentOps() {
         if (element.tagName === 'A') {
           setEditingLink(element);
           setLinkUrl(element.href);
+          setLinkText(element.textContent || '');
           setShowLinkModal(true);
           return;
         }
@@ -539,16 +554,22 @@ export default function ContentOps() {
     saveSelection();
     setEditingLink(null);
     setLinkUrl('');
+    setLinkText('');
     setShowLinkModal(true);
   };
 
   const applyLink = () => {
     if (!linkUrl) return;
     if (editingLink) {
+      // Editing existing link
       editingLink.href = linkUrl;
       editingLink.target = '_blank';
       editingLink.rel = 'noopener noreferrer';
+      if (linkText && linkText.trim()) {
+        editingLink.textContent = linkText;
+      }
     } else {
+      // Creating new link
       if (savedSelection) {
         const selection = window.getSelection();
         selection.removeAllRanges();
@@ -560,7 +581,8 @@ export default function ContentOps() {
         link.rel = 'noopener noreferrer';
         link.style.color = '#0ea5e9';
         link.style.textDecoration = 'underline';
-        link.textContent = selectedText || linkUrl;
+        // Use linkText if provided, otherwise use selected text or URL
+        link.textContent = linkText?.trim() || selectedText || linkUrl;
         if (selectedText) {
           savedSelection.deleteContents();
         }
@@ -574,6 +596,7 @@ export default function ContentOps() {
     }
     setShowLinkModal(false);
     setLinkUrl('');
+    setLinkText('');
     setEditingLink(null);
   };
 
@@ -628,6 +651,7 @@ export default function ContentOps() {
   };
 
   const handleContentClick = (e) => {
+    // Check if click is on an image
     if (e.target.tagName === 'IMG') {
       const src = e.target.src;
       const alt = e.target.alt || '';
@@ -635,12 +659,28 @@ export default function ContentOps() {
       setImageAltModal({ show: true, src, currentAlt: alt, index: imgIndex });
       return;
     }
-    if (e.target.tagName === 'A') {
-      if (e.ctrlKey || e.metaKey) return;
-      e.preventDefault();
-      setEditingLink(e.target);
-      setLinkUrl(e.target.href);
-      setShowLinkModal(true);
+    
+    // Check if click is on a link or inside a link
+    let targetElement = e.target;
+    while (targetElement && targetElement !== e.currentTarget) {
+      if (targetElement.tagName === 'A') {
+        console.log('Link clicked:', targetElement.href, targetElement.textContent);
+        // Allow Ctrl/Cmd+Click to open link in new tab
+        if (e.ctrlKey || e.metaKey) {
+          console.log('Ctrl/Cmd+Click detected, opening link');
+          return;
+        }
+        // Prevent default link behavior and open edit modal
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Opening link editor modal');
+        setEditingLink(targetElement);
+        setLinkUrl(targetElement.href);
+        setLinkText(targetElement.textContent || '');
+        setShowLinkModal(true);
+        return;
+      }
+      targetElement = targetElement.parentElement;
     }
   };
 
@@ -1348,10 +1388,23 @@ export default function ContentOps() {
                         color: #0ea5e9;
                         text-decoration: underline;
                         cursor: pointer;
+                        pointer-events: auto;
+                        position: relative;
                       }
                       .blog-content a:hover {
                         color: #0284c7;
                         text-decoration: underline;
+                        background-color: rgba(14, 165, 233, 0.1);
+                      }
+                      .blog-content a::after {
+                        content: "✏️";
+                        font-size: 0.7em;
+                        margin-left: 4px;
+                        opacity: 0;
+                        transition: opacity 0.2s;
+                      }
+                      .blog-content a:hover::after {
+                        opacity: 0.6;
                       }
                     `}</style>
                     <div className="text-[#0ea5e9] text-sm font-bold mb-2">📝 EDITABLE CONTENT</div>
@@ -1372,38 +1425,17 @@ export default function ContentOps() {
                         <button onClick={insertImage} className="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-sm" title="Add Image">🖼️</button>
                       </div>
                       <div className="ml-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700 whitespace-nowrap">
-                        💡 Tip: Ctrl+Click links to open
+                        💡 Click links to edit • Ctrl+Click to open
                       </div>
                     </div>
                     <div ref={afterViewRef} className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]" contentEditable={true} suppressContentEditableWarning={true} onInput={handleAfterViewInput} onClick={handleContentClick} style={{ maxHeight: '800px', outline: 'none', cursor: 'text' }} />
                   </div>
                 </div>
-              )}
             </div>
             
             <div className="flex gap-4">
               <button onClick={() => setView('dashboard')} className="flex-1 bg-gray-100 text-gray-700 py-4 rounded-lg font-semibold hover:bg-gray-200">← Cancel</button>
-              <button 
-                onClick={async () => {
-                  try {
-                    setStatus({ type: 'info', message: 'Testing connection...' });
-                    const response = await fetch(`${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&itemId=${selectedBlog.id}`, {
-                      headers: { 'Authorization': `Bearer ${config.webflowKey}`, 'accept': 'application/json' }
-                    });
-                    if (response.ok) {
-                      setStatus({ type: 'success', message: '✅ Connection OK! Ready to publish.' });
-                    } else {
-                      setStatus({ type: 'error', message: '❌ Connection failed. Check API token.' });
-                    }
-                  } catch (err) {
-                    setStatus({ type: 'error', message: '❌ Network error: ' + err.message });
-                  }
-                }}
-                className="flex-1 bg-gray-600 text-white py-4 rounded-lg font-semibold hover:bg-gray-700"
-              >
-                Test Connection
-              </button>
-              <button onClick={publishToWebflow} disabled={loading} className="flex-2 bg-[#0ea5e9] text-white py-4 px-8 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg">{loading ? <><Loader className="w-5 h-5 animate-spin" />{status.message.includes('Retry') ? status.message : 'Publishing...'}</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}</button>
+              <button onClick={publishToWebflow} disabled={loading} className="flex-1 bg-[#0ea5e9] text-white py-4 px-8 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg">{loading ? <><Loader className="w-5 h-5 animate-spin" />{status.message.includes('Retry') ? status.message : 'Publishing...'}</> : <><CheckCircle className="w-5 h-5" />Publish to Webflow</>}</button>
             </div>
             
             {/* Error/Status Display */}
@@ -1466,11 +1498,13 @@ export default function ContentOps() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold mb-4">{editingLink ? '✏️ Edit Link' : '🔗 Add Link'}</h3>
+            <label className="block text-sm font-semibold mb-2">Link Text</label>
+            <input type="text" value={linkText} onChange={(e) => setLinkText(e.target.value)} placeholder="Click here" className="w-full bg-gray-50 border rounded px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" />
             <label className="block text-sm font-semibold mb-2">URL</label>
             <input type="url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://example.com" className="w-full bg-gray-50 border rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" autoFocus onKeyPress={(e) => e.key === 'Enter' && applyLink()} />
             <div className="flex gap-3 mt-4">
-              <button onClick={() => { setShowLinkModal(false); setLinkUrl(''); setEditingLink(null); }} className="flex-1 bg-gray-100 py-3 rounded font-semibold">Cancel</button>
-              {editingLink && <button onClick={() => { if (editingLink) { editingLink.parentNode.replaceChild(document.createTextNode(editingLink.textContent), editingLink); if (afterViewRef.current) setEditedContent(afterViewRef.current.innerHTML); } setShowLinkModal(false); setLinkUrl(''); setEditingLink(null); }} className="flex-1 bg-red-500 text-white py-3 rounded font-semibold">Remove</button>}
+              <button onClick={() => { setShowLinkModal(false); setLinkUrl(''); setLinkText(''); setEditingLink(null); }} className="flex-1 bg-gray-100 py-3 rounded font-semibold">Cancel</button>
+              {editingLink && <button onClick={() => { if (editingLink) { editingLink.parentNode.replaceChild(document.createTextNode(editingLink.textContent), editingLink); if (afterViewRef.current) setEditedContent(afterViewRef.current.innerHTML); } setShowLinkModal(false); setLinkUrl(''); setLinkText(''); setEditingLink(null); }} className="flex-1 bg-red-500 text-white py-3 rounded font-semibold">Remove</button>}
               <button onClick={applyLink} className="flex-1 bg-[#0ea5e9] text-white py-3 rounded font-semibold">{editingLink ? 'Update' : 'Add'}</button>
             </div>
           </div>
