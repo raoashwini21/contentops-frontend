@@ -348,6 +348,8 @@ export default function ContentOps() {
   const [blogTitle, setBlogTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [metaFieldName, setMetaFieldName] = useState('post-summary'); // Track which field to use
+  const [blogCache, setBlogCache] = useState(null);
+  const [cacheTimestamp, setCacheTimestamp] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('contentops_config');
@@ -733,53 +735,100 @@ export default function ContentOps() {
     fetchBlogs();
   };
 
- const fetchBlogs = async () => {
+ const fetchBlogs = async (forceRefresh = false) => {
+  // Check cache (valid for 10 minutes)
+  const cacheAge = cacheTimestamp ? Date.now() - cacheTimestamp : Infinity;
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+  
+  if (!forceRefresh && blogCache && cacheAge < CACHE_DURATION) {
+    console.log('✓ Using cached blogs');
+    setBlogs(blogCache);
+    const minutesAgo = Math.round(cacheAge / 60000);
+    setStatus({ 
+      type: 'success', 
+      message: `${blogCache.length} blogs (cached ${minutesAgo}m ago)` 
+    });
+    setView('dashboard');
+    return;
+  }
+
   setLoading(true);
-  setStatus({ type: 'info', message: 'Fetching all blogs...' });
+  setStatus({ type: 'info', message: 'Fetching blogs... This may take 1-2 minutes.' });
 
   try {
     const allItems = [];
     const limit = 100;
     let offset = 0;
     let hasMore = true;
+    let totalFetched = 0;
+
+    // 3 minute timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
 
     while (hasMore) {
+      setStatus({ 
+        type: 'info', 
+        message: `Fetching blogs... ${totalFetched} loaded${offset > 0 ? ', loading more...' : ''}` 
+      });
+
       const response = await fetch(
         `${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&limit=${limit}&offset=${offset}`,
         {
           headers: {
             'Authorization': `Bearer ${config.webflowKey}`,
             'accept': 'application/json'
-          }
+          },
+          signal: controller.signal
         }
       );
 
       if (!response.ok) {
-        throw new Error(`Failed at offset ${offset}`);
+        clearTimeout(timeoutId);
+        throw new Error(`Failed at offset ${offset}: ${response.status}`);
       }
 
       const data = await response.json();
       const items = data.items || [];
 
       allItems.push(...items);
+      totalFetched += items.length;
+
+      // Update UI progressively
+      setBlogs([...allItems]);
 
       // Stop when fewer than limit returned
       if (items.length < limit) {
         hasMore = false;
       } else {
         offset += limit;
+        // Delay to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
+    clearTimeout(timeoutId);
+
+    // Cache results
     setBlogs(allItems);
+    setBlogCache(allItems);
+    setCacheTimestamp(Date.now());
+    
     setStatus({
       type: 'success',
-      message: `Found ${allItems.length} blog posts`
+      message: `✅ Loaded ${allItems.length} blogs`
     });
     setView('dashboard');
 
   } catch (error) {
-    setStatus({ type: 'error', message: error.message });
+    if (error.name === 'AbortError') {
+      setStatus({ 
+        type: 'error', 
+        message: 'Request timed out after 3 minutes. Webflow may be slow - try again in a moment.' 
+      });
+    } else {
+      setStatus({ type: 'error', message: error.message });
+    }
   } finally {
     setLoading(false);
   }
@@ -951,7 +1000,7 @@ export default function ContentOps() {
         
         // Create abort controller for timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
         
         // Build fieldData with the correct meta description field name
         const fieldData = {
@@ -995,11 +1044,11 @@ export default function ContentOps() {
         
         // Handle timeout specifically
         if (error.name === 'AbortError') {
-          console.error('Request timed out after 30 seconds');
+          console.error('Request timed out after 2 minutes');
           if (attempt === maxRetries) {
             setStatus({ 
               type: 'error', 
-              message: 'Request timed out. Your content might be too large or Webflow is slow to respond.' 
+              message: 'Request timed out. Webflow may be slow - your content might be too large or Webflow is responding slowly.' 
             });
             setLoading(false);
             return;
@@ -1085,7 +1134,15 @@ export default function ContentOps() {
           <div>
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-3xl font-bold text-[#0f172a]">Your Blog Posts</h2>
-              <button onClick={fetchBlogs} disabled={loading} className="bg-white text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 border hover:bg-gray-50"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+              <button onClick={() => fetchBlogs(true)} disabled={loading} className="bg-white text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 border hover:bg-gray-50">
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+                {cacheTimestamp && !loading && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    ({Math.round((Date.now() - cacheTimestamp) / 60000)}m ago)
+                  </span>
+                )}
+              </button>
             </div>
             {loading ? (
               <div className="text-center py-12"><Loader className="w-12 h-12 text-[#0ea5e9] animate-spin mx-auto mb-4" /><p className="text-gray-600">Loading...</p></div>
@@ -1431,6 +1488,7 @@ export default function ContentOps() {
                     <div ref={afterViewRef} className="blog-content text-gray-800 overflow-y-auto bg-white rounded-lg p-6 min-h-[600px]" contentEditable={true} suppressContentEditableWarning={true} onInput={handleAfterViewInput} onClick={handleContentClick} style={{ maxHeight: '800px', outline: 'none', cursor: 'text' }} />
                   </div>
                 </div>
+              )}
             </div>
             
             <div className="flex gap-4">
