@@ -916,6 +916,30 @@ export default function ContentOps() {
       const data = await response.json();
       const items = data.items || [];
 
+      // Check if backend served from cache (returns ALL blogs at once)
+      const cacheHit = response.headers.get('X-Cache') === 'HIT';
+      
+      if (cacheHit && offset === 0) {
+        // Backend returned ALL cached blogs in one shot - no need to paginate!
+        console.log(`✅ Backend cache hit - received all ${items.length} blogs at once`);
+        allItems = items; // Replace, don't append
+        hasMore = false; // Stop pagination
+        
+        // Deduplicate (just in case)
+        const uniqueItems = [];
+        const seenIds = new Set();
+        for (const item of allItems) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            uniqueItems.push(item);
+          }
+        }
+        allItems = uniqueItems;
+        setBlogs([...allItems]);
+        break; // Exit loop immediately
+      }
+
+      // Normal pagination (cache miss - fetching from Webflow)
       // Deduplicate by ID before adding
       const uniqueNewItems = items.filter(item => !allItems.some(existing => existing.id === item.id));
       allItems.push(...uniqueNewItems);
@@ -929,7 +953,7 @@ export default function ContentOps() {
         hasMore = false;
       } else {
         offset += limit;
-        // Delay to avoid rate limits
+        // Delay to avoid rate limits (only needed when fetching from Webflow)
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
