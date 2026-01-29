@@ -724,6 +724,131 @@ export default function ContentOps() {
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
   };
 
+  const testWebflowConnection = async () => {
+    setLoading(true);
+    setStatus({ type: 'info', message: 'Testing Webflow connection...' });
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second test
+
+      console.log('Testing Webflow API...');
+      console.log('Collection ID:', config.collectionId);
+      console.log('Token:', config.webflowKey ? 'Present (hidden)' : 'Missing');
+
+      const response = await fetch(
+        `${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&limit=1&offset=0`,
+        {
+          headers: {
+            'Authorization': `Bearer ${config.webflowKey}`,
+            'accept': 'application/json'
+          },
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error response:', errorData);
+        throw new Error(`Webflow API error: ${response.status} - ${errorData.message || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+      console.log('Success! Sample data:', data);
+
+      setStatus({
+        type: 'success',
+        message: `✅ Connection successful! Test returned ${data.items?.length || 0} blog (Webflow API working).`
+      });
+
+      // Auto-load blogs after successful test
+      setTimeout(() => fetchBlogs(), 1000);
+
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      
+      if (error.name === 'AbortError') {
+        setStatus({ 
+          type: 'error', 
+          message: '❌ Connection test timed out after 15s. Webflow API is not responding. Check: 1) Token valid? 2) Collection ID correct? 3) Webflow status page?' 
+        });
+      } else {
+        setStatus({ 
+          type: 'error', 
+          message: `❌ Connection failed: ${error.message}. Check your Webflow token and Collection ID.` 
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchBlogsQuick = async () => {
+    setLoading(true);
+    setStatus({ type: 'info', message: '⚡ Quick loading recent blogs...' });
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      const response = await fetch(
+        `${BACKEND_URL}/api/webflow?collectionId=${config.collectionId}&limit=10&offset=0`,
+        {
+          headers: {
+            'Authorization': `Bearer ${config.webflowKey}`,
+            'accept': 'application/json'
+          },
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const items = data.items || [];
+
+      // Deduplicate by ID
+      const uniqueItems = [];
+      const seenIds = new Set();
+      for (const item of items) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          uniqueItems.push(item);
+        }
+      }
+
+      setBlogs(uniqueItems);
+      setBlogCache(uniqueItems);
+      setCacheTimestamp(Date.now());
+      
+      setStatus({
+        type: 'success',
+        message: `⚡ Quick loaded ${uniqueItems.length} recent blogs`
+      });
+      setView('dashboard');
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        setStatus({ 
+          type: 'error', 
+          message: 'Quick load timed out. Webflow API is very slow - try again or check Webflow status.' 
+        });
+      } else {
+        setStatus({ type: 'error', message: error.message });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const saveConfig = () => {
     if (!config.anthropicKey || !config.braveKey || !config.webflowKey || !config.collectionId) {
       setStatus({ type: 'error', message: 'Please fill in all fields' });
@@ -732,7 +857,7 @@ export default function ContentOps() {
     localStorage.setItem('contentops_config', JSON.stringify(config));
     setSavedConfig(config);
     setStatus({ type: 'success', message: 'Configuration saved!' });
-    fetchBlogs();
+    testWebflowConnection(); // Test first instead of full load
   };
 
  const fetchBlogs = async (forceRefresh = false) => {
@@ -769,7 +894,7 @@ export default function ContentOps() {
     while (hasMore) {
       setStatus({ 
         type: 'info', 
-        message: `Fetching blogs... ${totalFetched} loaded${offset > 0 ? ', loading more...' : ''}` 
+        message: `Fetching blogs... ${allItems.length} unique blogs loaded${offset > 0 ? ', loading more...' : ''}` 
       });
 
       const response = await fetch(
@@ -791,10 +916,12 @@ export default function ContentOps() {
       const data = await response.json();
       const items = data.items || [];
 
-      allItems.push(...items);
+      // Deduplicate by ID before adding
+      const uniqueNewItems = items.filter(item => !allItems.some(existing => existing.id === item.id));
+      allItems.push(...uniqueNewItems);
       totalFetched += items.length;
 
-      // Update UI progressively
+      // Update UI progressively with unique items only
       setBlogs([...allItems]);
 
       // Stop when fewer than limit returned
@@ -809,14 +936,26 @@ export default function ContentOps() {
 
     clearTimeout(timeoutId);
 
+    // Final deduplication check
+    const finalUniqueItems = [];
+    const finalSeenIds = new Set();
+    for (const item of allItems) {
+      if (!finalSeenIds.has(item.id)) {
+        finalSeenIds.add(item.id);
+        finalUniqueItems.push(item);
+      }
+    }
+
+    const duplicatesRemoved = allItems.length - finalUniqueItems.length;
+
     // Cache results
-    setBlogs(allItems);
-    setBlogCache(allItems);
+    setBlogs(finalUniqueItems);
+    setBlogCache(finalUniqueItems);
     setCacheTimestamp(Date.now());
     
     setStatus({
       type: 'success',
-      message: `✅ Loaded ${allItems.length} blogs`
+      message: `✅ Loaded ${finalUniqueItems.length} unique blogs${duplicatesRemoved > 0 ? ` (removed ${duplicatesRemoved} duplicates)` : ''}`
     });
     setView('dashboard');
 
@@ -1134,15 +1273,24 @@ export default function ContentOps() {
           <div>
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-3xl font-bold text-[#0f172a]">Your Blog Posts</h2>
-              <button onClick={() => fetchBlogs(true)} disabled={loading} className="bg-white text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 border hover:bg-gray-50">
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
-                {cacheTimestamp && !loading && (
-                  <span className="text-xs text-gray-500 ml-1">
-                    ({Math.round((Date.now() - cacheTimestamp) / 60000)}m ago)
-                  </span>
-                )}
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={testWebflowConnection} disabled={loading} className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-600 text-sm">
+                  <Zap className="w-4 h-4" />
+                  Test Connection
+                </button>
+                <button onClick={fetchBlogsQuick} disabled={loading} className="bg-green-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-600 text-sm">
+                  ⚡ Quick Load (10)
+                </button>
+                <button onClick={() => fetchBlogs(true)} disabled={loading} className="bg-white text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 border hover:bg-gray-50">
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Load All</span>
+                  {cacheTimestamp && !loading && (
+                    <span className="text-xs text-gray-500 ml-1">
+                      ({Math.round((Date.now() - cacheTimestamp) / 60000)}m ago)
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
             {loading ? (
               <div className="text-center py-12"><Loader className="w-12 h-12 text-[#0ea5e9] animate-spin mx-auto mb-4" /><p className="text-gray-600">Loading...</p></div>
@@ -1158,11 +1306,25 @@ export default function ContentOps() {
               </div>
             )}
             {status.message && (
-              <div className={`mt-6 p-4 rounded-lg flex items-center gap-2 ${status.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                {status.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600" />}
-                {status.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600" />}
-                {status.type === 'info' && <Loader className="w-5 h-5 text-blue-600 animate-spin" />}
-                <p className={`text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</p>
+              <div className={`mt-6 p-4 rounded-lg flex items-start gap-2 ${status.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                <div className="flex-1">
+                  {status.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600 inline mr-2" />}
+                  {status.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600 inline mr-2" />}
+                  {status.type === 'info' && <Loader className="w-5 h-5 text-blue-600 animate-spin inline mr-2" />}
+                  <span className={`text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</span>
+                  
+                  {status.type === 'error' && status.message.includes('timed out') && (
+                    <div className="mt-3 p-3 bg-white border border-red-200 rounded">
+                      <p className="text-xs font-semibold text-red-900 mb-2">🔧 Troubleshooting:</p>
+                      <ul className="text-xs text-red-800 space-y-1">
+                        <li>• Click "Test Connection" to diagnose the issue</li>
+                        <li>• Try "Quick Load (10)" for faster access</li>
+                        <li>• Check Webflow API status: <a href="https://status.webflow.com" target="_blank" className="underline text-blue-600">status.webflow.com</a></li>
+                        <li>• Verify your Webflow token in Settings</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
