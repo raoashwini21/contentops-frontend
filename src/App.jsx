@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye } from 'lucide-react';
+import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye, Copy } from 'lucide-react';
 
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
@@ -78,12 +78,31 @@ ALWAYS USE: Contractions, active voice, short sentences, HTML bold tags (<strong
 **CRITICAL: PRESERVE ALL FORMATTING AND STRUCTURE EXACTLY**
 - Keep ALL heading tags (<h1>, <h2>, <h3>, <h4>, <h5>, <h6>) EXACTLY as they are in the original
 - Keep ALL heading hierarchy the same - do NOT change H2 to H3, or H3 to H2, etc.
+- Keep ALL heading text EXACTLY the same - do NOT rewrite, rephrase, or modify heading content
+- Keep ALL heading IDs and attributes unchanged
+
+**ABSOLUTE RULE FOR HEADINGS:**
+DO NOT modify heading content in any way. Headings must be copied EXACTLY character-for-character from the original HTML.
+Examples:
+- Original: <h2 id="best-linkedin-automation-tools">Best LinkedIn Automation Tools</h2>
+- CORRECT: Keep it EXACTLY as-is
+- WRONG: <h2 id="best-linkedin-automation-tools">Top LinkedIn Automation Tools</h2>
+- WRONG: <h2>Best LinkedIn Automation Tools</h2> (missing ID)
+
 - Keep ALL heading text the same unless it contains factual errors
 - Keep ALL bold (<strong>, <b>) and italic (<em>, <i>) formatting EXACTLY as-is
 - Keep ALL links (<a> tags) EXACTLY as-is - preserve href, target, and all attributes
 - Keep ALL paragraph breaks and spacing EXACTLY as they appear in original
 - Keep ALL list structures (<ul>, <ol>, <li>) EXACTLY as-is
 - Keep ALL class attributes, IDs, and data attributes unchanged
+
+**CRITICAL: LIST STRUCTURE (CRITICAL FOR WEBFLOW):**
+- ALWAYS wrap <li> elements in <ul> or <ol> tags
+- NEVER put <li> directly inside <p> tags
+- CORRECT: <ul role="list"><li role="listitem">Item</li></ul>
+- WRONG: <p><li>Item</li></p>
+- Lists must have role="list" attribute for Webflow
+- List items must have role="listitem" attribute for Webflow
 
 **CRITICAL: PRESERVE ALL SPECIAL ELEMENTS - DO NOT CONVERT TO TEXT**
 - Keep ALL <iframe>, <script>, <embed>, <object>, <video>, <audio>, <canvas>, <form> tags EXACTLY as-is
@@ -495,6 +514,7 @@ export default function ContentOps() {
     setEditedContent(afterViewRef.current.innerHTML);
   };
 
+  // FIXED: formatList now adds Webflow attributes
   const formatList = (type) => {
     if (!afterViewRef.current) return;
     const selection = window.getSelection();
@@ -526,9 +546,12 @@ export default function ContentOps() {
       });
       parentList.parentNode.replaceChild(fragment, parentList);
     } else {
-      // Create new list
+      // Create new list with Webflow attributes
       const listElement = document.createElement(type === 'bullet' ? 'ul' : 'ol');
+      listElement.setAttribute('role', 'list');  // Add Webflow attribute
+      
       const li = document.createElement('li');
+      li.setAttribute('role', 'listitem');  // Add Webflow attribute
       li.innerHTML = block.innerHTML;
       listElement.appendChild(li);
       block.parentNode.replaceChild(listElement, block);
@@ -724,6 +747,31 @@ export default function ContentOps() {
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1 });
   };
 
+
+  // NEW: Copy HTML to clipboard
+  const copyHTMLToClipboard = () => {
+    // Get the sanitized HTML (same as what would be published)
+    const sanitizedHTML = sanitizeListHTML(editedContent);
+    
+    navigator.clipboard.writeText(sanitizedHTML).then(() => {
+      setStatus({ 
+        type: 'success', 
+        message: '✅ HTML copied to clipboard! You can now use it in your n8n workflow.' 
+      });
+      
+      // Clear status after 3 seconds
+      setTimeout(() => {
+        setStatus({ type: '', message: '' });
+      }, 3000);
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      setStatus({ 
+        type: 'error', 
+        message: '❌ Failed to copy HTML. Please try again.' 
+      });
+    });
+  };
+
   const testWebflowConnection = async () => {
     setLoading(true);
     setStatus({ type: 'info', message: 'Testing Webflow connection...' });
@@ -881,7 +929,7 @@ export default function ContentOps() {
   setStatus({ type: 'info', message: 'Fetching blogs... This may take 1-2 minutes.' });
 
   try {
-    const allItems = [];
+    let allItems = [];
     const limit = 100;
     let offset = 0;
     let hasMore = true;
@@ -1123,6 +1171,81 @@ export default function ContentOps() {
     }
   };
 
+  // NEW: Fix malformed lists before publishing
+  const sanitizeListHTML = (html) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+    const container = doc.body.firstChild;
+
+    // Find all <li> elements that are NOT inside <ul> or <ol>
+    const orphanedListItems = Array.from(container.querySelectorAll('li')).filter(li => {
+      const parent = li.parentElement;
+      return parent && parent.tagName !== 'UL' && parent.tagName !== 'OL';
+    });
+
+    if (orphanedListItems.length > 0) {
+      console.log(`🔧 Fixing ${orphanedListItems.length} orphaned list items...`);
+
+      const processedLis = new Set();
+      
+      orphanedListItems.forEach(li => {
+        if (processedLis.has(li)) return;
+        
+        // Find consecutive siblings that are also <li>
+        const group = [li];
+        processedLis.add(li);
+        
+        let nextSibling = li.nextElementSibling;
+        while (nextSibling && nextSibling.tagName === 'LI' && orphanedListItems.includes(nextSibling)) {
+          group.push(nextSibling);
+          processedLis.add(nextSibling);
+          nextSibling = nextSibling.nextElementSibling;
+        }
+        
+        // Wrap group in <ul>
+        if (group.length > 0) {
+          const ul = document.createElement('ul');
+          ul.setAttribute('role', 'list');
+          
+          const parent = li.parentElement;
+          
+          if (parent.tagName === 'P' && parent.children.length === 1 && parent.children[0] === li) {
+            group.forEach(item => {
+              item.setAttribute('role', 'listitem');
+              ul.appendChild(item);
+            });
+            parent.replaceWith(ul);
+          } else {
+            parent.insertBefore(ul, li);
+            group.forEach(item => {
+              item.setAttribute('role', 'listitem');
+              ul.appendChild(item);
+            });
+          }
+        }
+      });
+    }
+
+    // Fix any <p> tags that only contain <li>
+    const paragraphs = container.querySelectorAll('p');
+    paragraphs.forEach(p => {
+      const children = Array.from(p.children);
+      const allLi = children.length > 0 && children.every(child => child.tagName === 'LI');
+      
+      if (allLi) {
+        const ul = document.createElement('ul');
+        ul.setAttribute('role', 'list');
+        children.forEach(li => {
+          li.setAttribute('role', 'listitem');
+          ul.appendChild(li);
+        });
+        p.replaceWith(ul);
+      }
+    });
+
+    return container.innerHTML;
+  };
+
   const publishToWebflow = async () => {
     if (!result || !selectedBlog) return;
     
@@ -1161,6 +1284,13 @@ export default function ContentOps() {
           metaFieldName: metaFieldName
         });
         
+        // Sanitize lists before publishing (browser-side, FREE!)
+        const sanitizedContent = sanitizeListHTML(editedContent);
+        
+        if (sanitizedContent !== editedContent) {
+          console.log('✅ Fixed malformed lists before publishing (no credits used - browser-side fix)');
+        }
+        
         // Create abort controller for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
@@ -1168,7 +1298,7 @@ export default function ContentOps() {
         // Build fieldData with the correct meta description field name
         const fieldData = {
           name: blogTitle.trim(),
-          'post-body': editedContent
+          'post-body': sanitizedContent  // Use sanitized content!
         };
         
         // Add meta description to the correct field
@@ -1419,6 +1549,14 @@ export default function ContentOps() {
             <div className="bg-white rounded-xl p-6 border shadow-lg">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-2xl font-bold text-[#0f172a]">📄 Content Editor</h3>
+                <button 
+                  onClick={copyHTMLToClipboard}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 text-sm font-semibold"
+                  title="Copy HTML for n8n workflow"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy HTML
+                </button>
               </div>
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
