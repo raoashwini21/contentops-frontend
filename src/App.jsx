@@ -493,6 +493,28 @@ const sanitizeListHTML = (html) => {
     }
   });
 
+  // 7. ANCHOR LINK FIX: The browser absolutizes #anchor hrefs inside contenteditable.
+  // For example, <a href="#features"> becomes <a href="https://app.claude.ai/#features">
+  // when read back from innerHTML. This strips the current origin back to just the hash,
+  // so Webflow receives the original #anchor value.
+  // External https:// links that genuinely point elsewhere are NOT touched.
+  root.querySelectorAll('a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href) return;
+    try {
+      const url = new URL(href);
+      if (
+        url.origin === window.location.origin &&
+        url.hash &&
+        (url.pathname === window.location.pathname || url.pathname === '/')
+      ) {
+        a.setAttribute('href', url.hash);
+      }
+    } catch {
+      // Not a parseable absolute URL (already relative like "#section") — leave it alone
+    }
+  });
+
   return root.innerHTML;
 };
 
