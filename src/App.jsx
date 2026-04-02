@@ -1174,6 +1174,56 @@ export default function ContentOps() {
     finally { setLoading(false); }
   };
 
+  // ── Anchor link helpers for Webflow publish ───
+  // Webflow CMS strips <a href="#hash"> links entirely — it only accepts absolute URLs.
+  // These helpers reconstruct the full live URL before the PATCH is sent.
+
+  // Find the live URL of the blog: GSC data first, then scan original content.
+  const getBlogLiveUrl = (blog, originalContent) => {
+    if (gscData?.data) {
+      const slug = blog.fieldData.slug || blog.fieldData.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const entry = gscData.data[slug];
+      if (entry?.url) return entry.url.split('#')[0];
+    }
+    if (originalContent) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<div>${originalContent}</div>`, 'text/html');
+        for (const a of doc.querySelectorAll('a[href]')) {
+          const href = a.getAttribute('href');
+          if (!href) continue;
+          try {
+            const url = new URL(href);
+            if (url.origin !== window.location.origin && url.hash && url.pathname.length > 1) {
+              return url.origin + url.pathname;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    return null;
+  };
+
+  // Convert every #hash and app-origin/#hash link to a full absolute URL.
+  const fixAnchorLinksForWebflow = (html, blogLiveUrl) => {
+    if (!blogLiveUrl) return html;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+    const root = doc.body.firstChild;
+    root.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href');
+      if (!href) return;
+      if (href.startsWith('#')) { a.setAttribute('href', blogLiveUrl + href); return; }
+      try {
+        const url = new URL(href);
+        if (url.origin === window.location.origin && url.hash) {
+          a.setAttribute('href', blogLiveUrl + url.hash);
+        }
+      } catch {}
+    });
+    return root.innerHTML;
+  };
+
   // ── Publish ───────────────────────────────────
   const publishToWebflow = async () => {
     if (!result || !selectedBlog) return;
@@ -1186,7 +1236,9 @@ export default function ContentOps() {
     setStatus({ type: 'info', message: 'Publishing...' });
 
     const sanitized = sanitizeListHTML(latestContent);
-    const fieldData = { name: blogTitle.trim(), 'post-body': sanitized };
+    const blogLiveUrl = getBlogLiveUrl(selectedBlog, result?.originalContent);
+    const fixedHtml = fixAnchorLinksForWebflow(sanitized, blogLiveUrl);
+    const fieldData = { name: blogTitle.trim(), 'post-body': fixedHtml };
     if (metaDescription.trim()) fieldData[metaFieldName] = metaDescription.trim();
 
     for (let attempt = 1; attempt <= 3; attempt++) {
