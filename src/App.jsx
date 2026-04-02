@@ -3,6 +3,27 @@ import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp,
 
 const BACKEND_URL = 'https://test-backend-production-f29b.up.railway.app';
 
+// ── Normalize browser-absolutized anchor hrefs ──
+// The browser resolves #anchor hrefs to absolute URLs inside contenteditable.
+// This converts them back to just "#hash" for display and storage.
+// External https:// links pointing to other origins are left untouched.
+const normalizeHref = (href) => {
+  if (!href) return href;
+  try {
+    const url = new URL(href);
+    if (
+      url.origin === window.location.origin &&
+      url.hash &&
+      (url.pathname === window.location.pathname || url.pathname === '/')
+    ) {
+      return url.hash;
+    }
+  } catch {
+    // Already relative (e.g. "#section") — leave as-is
+  }
+  return href;
+};
+
 // ── Blog type detection ─────────────────────────
 const detectBlogType = (title) => {
   const t = title.toLowerCase();
@@ -722,7 +743,7 @@ export default function ContentOps() {
         if (e.ctrlKey || e.metaKey) return;
         e.preventDefault();
         setEditingLink(el);
-        setLinkUrl(el.href);
+        setLinkUrl(normalizeHref(el.href));
         setLinkText(el.textContent || '');
         setShowLinkModal(true);
         return;
@@ -738,7 +759,7 @@ export default function ContentOps() {
     if (sel.rangeCount) {
       let el = sel.getRangeAt(0).commonAncestorContainer;
       while (el && el !== editorRef.current) {
-        if (el.tagName === 'A') { setEditingLink(el); setLinkUrl(el.href); setLinkText(el.textContent); setShowLinkModal(true); return; }
+        if (el.tagName === 'A') { setEditingLink(el); setLinkUrl(normalizeHref(el.href)); setLinkText(el.textContent); setShowLinkModal(true); return; }
         el = el.parentElement;
       }
     }
