@@ -769,16 +769,16 @@ export default function ContentOps() {
   const applyLink = () => {
     if (!linkUrl) return;
     if (editingLink) {
-      editingLink.href = linkUrl;
-      editingLink.target = '_blank';
-      editingLink.rel = 'noopener noreferrer';
+      editingLink.setAttribute('href', linkUrl);
+      editingLink.setAttribute('target', '_blank');
+      editingLink.setAttribute('rel', 'noopener noreferrer');
       if (linkText.trim()) editingLink.textContent = linkText;
     } else {
       restoreRange();
       const sel = window.getSelection();
       const selectedText = sel.toString();
       const a = document.createElement('a');
-      a.href = linkUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.setAttribute('href', linkUrl); a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.style.color = '#0ea5e9'; a.style.textDecoration = 'underline';
       a.textContent = linkText?.trim() || selectedText || linkUrl;
       if (savedRangeRef.current) {
