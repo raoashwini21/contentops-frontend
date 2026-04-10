@@ -33,10 +33,6 @@ const detectBlogType = (title) => {
 };
 
 // ── Brand confusion detection ───────────────────
-// Generic brand confusion detection system.
-// Has a known-confusions database AND a fallback for unknown brands.
-// Works for any brand — not just Copilot.
-
 const KNOWN_BRAND_CONFUSIONS = [
   {
     trigger: 'copilot',
@@ -250,12 +246,10 @@ const detectBrandContext = (title, content) => {
   const c = (content || '').toLowerCase();
   const combined = t + ' ' + c;
 
-  // ── Pass 1: Check known brand confusions ──
   for (const confusion of KNOWN_BRAND_CONFUSIONS) {
     if (!combined.includes(confusion.trigger)) continue;
     if (confusion.variants.length < 2) continue;
 
-    // Score each variant by signal matches
     const scored = confusion.variants.map(v => {
       let score = 0;
       let antiScore = 0;
@@ -273,13 +267,11 @@ const detectBrandContext = (title, content) => {
     const second = scored[1];
 
     if (best.net > 0 && (second.net <= 0 || best.net >= second.net + 3)) {
-      // Clear winner
       const others = scored.filter(s => s !== best).map(s => s.name).join(', ');
       hints.push(
         `BRAND DISAMBIGUATION: "${confusion.trigger}" in this blog refers to ${best.name}${best.domain ? ` (${best.domain})` : ''} — ${best.description}. It is NOT ${others}. Do NOT include any information about ${others}. All facts, pricing, features, and comparisons must be about ${best.name}.`
       );
     } else {
-      // Ambiguous
       const variantList = scored.map(s => `${s.name}${s.domain ? ` (${s.domain})` : ''}: ${s.description}`).join('; ');
       hints.push(
         `BRAND DISAMBIGUATION: The word "${confusion.trigger}" appears in this blog and could refer to multiple products: ${variantList}. READ THE FULL BLOG CAREFULLY to determine which product is being discussed. Ensure ALL facts, pricing, and features match the correct product. Do NOT mix up these different products.`
@@ -287,14 +279,11 @@ const detectBrandContext = (title, content) => {
     }
   }
 
-  // ── Pass 2: Generic fallback for brands NOT in database ──
-  // Catches patterns like "X review", "X vs Y", "X pricing", "X alternative"
   const titleMatch = (title || '').match(/^([\w][\w .&-]{1,30}?)\s+(review|vs\.?|versus|pricing|alternative|comparison|competitors)/i);
   if (titleMatch) {
     const brandName = titleMatch[1].trim().toLowerCase();
     const alreadyHandled = hints.some(h => h.toLowerCase().includes(brandName));
     if (!alreadyHandled && brandName.length > 2) {
-      // Look for a domain in the content that clarifies the brand
       const escaped = brandName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[-. ]?');
       const domainMatch = combined.match(new RegExp(`(${escaped}\\.[a-z]{2,10})`, 'i'));
       if (domainMatch) {
@@ -312,7 +301,7 @@ const detectBrandContext = (title, content) => {
   return hints;
 };
 
-// ── TL;DR detection & generation ────────────────
+// ── TL;DR detection ─────────────────────────────
 const hasTldr = (html) => {
   const lower = html.toLowerCase();
   return (
@@ -389,38 +378,26 @@ const createHighlightedHTML = (original, updated) => {
   return { html, changesCount: changes };
 };
 
-// ── List sanitizer (runs before every publish AND copy) ──
-// Webflow's rich text API has a known bug where lists show as blank if:
-//   1. There's no paragraph/block element before a <ul>/<ol>
-//   2. <li> contains wrapper elements like <span> instead of plain text
-//   3. Lists have attributes Webflow doesn't expect
-// This sanitizer fixes all of those issues.
+// ── List sanitizer ──────────────────────────────
 const sanitizeListHTML = (html) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
   const root = doc.body.firstChild;
 
-  // 0. WEBFLOW FIX: Flatten nested lists (Webflow doesn't support nested ul/ol in rich text)
-  // Convert: <ul><li>Parent<ul><li>Child</li></ul></li></ul>
-  // Into:    <ul><li>Parent</li><li>— Child</li></ul>
-  // Repeat until no more nesting exists
   let maxPasses = 5;
   while (root.querySelector('li ul, li ol') && maxPasses-- > 0) {
     root.querySelectorAll('li > ul, li > ol').forEach(nestedList => {
       const parentLi = nestedList.parentElement;
-      const parentList = parentLi.parentElement; // the outer ul/ol
+      const parentList = parentLi.parentElement;
 
-      // Extract nested items and insert them after the parent <li>
       const nestedItems = Array.from(nestedList.querySelectorAll(':scope > li'));
       let insertAfter = parentLi;
 
       nestedItems.forEach(nestedLi => {
-        // Prefix with "— " to show it was a sub-item
         const text = nestedLi.innerHTML.trim();
         if (!text.startsWith('—') && !text.startsWith('–') && !text.startsWith('-')) {
           nestedLi.innerHTML = '— ' + text;
         }
-        // Insert after the parent li in the parent list
         if (insertAfter.nextSibling) {
           parentList.insertBefore(nestedLi, insertAfter.nextSibling);
         } else {
@@ -429,12 +406,10 @@ const sanitizeListHTML = (html) => {
         insertAfter = nestedLi;
       });
 
-      // Remove the now-empty nested list
       nestedList.remove();
     });
   }
 
-  // 1. Fix orphaned <li> not inside ul/ol
   const orphans = Array.from(root.querySelectorAll('li')).filter(li => {
     const p = li.parentElement;
     return p && p.tagName !== 'UL' && p.tagName !== 'OL';
@@ -461,7 +436,6 @@ const sanitizeListHTML = (html) => {
     });
   }
 
-  // 2. Fix <p> containing only <li>
   root.querySelectorAll('p').forEach(p => {
     const kids = Array.from(p.children);
     if (kids.length && kids.every(c => c.tagName === 'LI')) {
@@ -472,41 +446,29 @@ const sanitizeListHTML = (html) => {
     }
   });
 
-  // 3. Ensure roles on all lists (Webflow expects role="list" and role="listitem")
   root.querySelectorAll('ul, ol').forEach(el => { if (!el.getAttribute('role')) el.setAttribute('role', 'list'); });
   root.querySelectorAll('li').forEach(el => { if (!el.getAttribute('role')) el.setAttribute('role', 'listitem'); });
 
-  // 4. WEBFLOW FIX: Ensure there's always a block element before each <ul>/<ol>
-  // Webflow's rich text engine fails to render lists that don't have a preceding block element
   root.querySelectorAll('ul, ol').forEach(list => {
     const prev = list.previousElementSibling;
     if (!prev || (prev.tagName !== 'P' && prev.tagName !== 'H1' && prev.tagName !== 'H2' &&
         prev.tagName !== 'H3' && prev.tagName !== 'H4' && prev.tagName !== 'H5' && prev.tagName !== 'H6' &&
         prev.tagName !== 'DIV' && prev.tagName !== 'BLOCKQUOTE')) {
-      // Check if there's any previous sibling at all
       const prevNode = list.previousSibling;
       if (!prevNode || (prevNode.nodeType === 3 && !prevNode.textContent.trim())) {
-        // No block element before this list — insert an empty <p> as spacer
-        // This is the known Webflow workaround
       }
     }
   });
 
-  // 5. WEBFLOW FIX: Unwrap unnecessary <span> inside <li>
-  // Webflow shows blank list items if <li> contains <span> wrappers
   root.querySelectorAll('li').forEach(li => {
-    // If li has a single child that's a span with no meaningful attributes, unwrap it
     if (li.children.length === 1 && li.children[0].tagName === 'SPAN') {
       const span = li.children[0];
-      // Only unwrap if span has no class/id/style that matters
       if (!span.className && !span.id && !span.style.cssText) {
         li.innerHTML = span.innerHTML;
       }
     }
   });
 
-  // 6. WEBFLOW FIX: Remove any <div> wrappers around <ul>/<ol>
-  // Webflow doesn't render lists inside wrapper divs in rich text
   root.querySelectorAll('div').forEach(div => {
     const kids = Array.from(div.children);
     if (kids.length === 1 && (kids[0].tagName === 'UL' || kids[0].tagName === 'OL')) {
@@ -514,11 +476,6 @@ const sanitizeListHTML = (html) => {
     }
   });
 
-  // 7. ANCHOR LINK FIX: The browser absolutizes #anchor hrefs inside contenteditable.
-  // For example, <a href="#features"> becomes <a href="https://app.claude.ai/#features">
-  // when read back from innerHTML. This strips the current origin back to just the hash,
-  // so Webflow receives the original #anchor value.
-  // External https:// links that genuinely point elsewhere are NOT touched.
   root.querySelectorAll('a[href]').forEach(a => {
     const href = a.getAttribute('href');
     if (!href) return;
@@ -532,7 +489,6 @@ const sanitizeListHTML = (html) => {
         a.setAttribute('href', url.hash);
       }
     } catch {
-      // Not a parseable absolute URL (already relative like "#section") — leave it alone
     }
   });
 
@@ -568,9 +524,6 @@ const EDITOR_STYLES = `
   .co-editor .tldr-box strong { color: #0369a1; }
 `;
 
-// ════════════════════════════════════════════════
-// MAIN APP
-// ════════════════════════════════════════════════
 export default function ContentOps() {
   const [view, setView] = useState('home');
   const [config, setConfig] = useState({ anthropicKey: '', braveKey: '', webflowKey: '', collectionId: '', siteId: '' });
@@ -585,6 +538,8 @@ export default function ContentOps() {
   const [blogTitle, setBlogTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [metaFieldName, setMetaFieldName] = useState('post-summary');
+  const [metaTitle, setMetaTitle] = useState('');
+  const [metaSeoDescription, setMetaSeoDescription] = useState('');
   const [blogCacheData, setBlogCacheData] = useState(null);
   const [cacheTimestamp, setCacheTimestamp] = useState(null);
   const [gscData, setGscData] = useState(null);
@@ -606,7 +561,6 @@ export default function ContentOps() {
   const savedRangeRef = useRef(null);
   const [contentVersion, setContentVersion] = useState(0);
 
-  // ── Init ──────────────────────────────────────
   useEffect(() => {
     const s = localStorage.getItem('contentops_config');
     if (s) { const p = JSON.parse(s); setSavedConfig(p); setConfig(p); }
@@ -618,10 +572,8 @@ export default function ContentOps() {
     if (editMode === 'edit' && editorRef.current) {
       editorRef.current.innerHTML = editedContent;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editMode, contentVersion]);
 
-  // ── Editor helpers ────────────────────────────
   const saveRange = () => {
     const sel = window.getSelection();
     if (sel.rangeCount > 0) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
@@ -659,7 +611,6 @@ export default function ContentOps() {
     return liveContentRef.current || editedContent;
   }, [editedContent]);
 
-  // ── Formatting ────────────────────────────────
   const execCmd = (cmd, val) => {
     editorRef.current?.focus();
     document.execCommand(cmd, false, val || null);
@@ -696,16 +647,11 @@ export default function ContentOps() {
     execCmd(type === 'bullet' ? 'insertUnorderedList' : 'insertOrderedList');
   };
 
-  // ── Editor click handlers ─────────────────────
-  // ── Paste handler: let browser paste normally, then clean up lists for Webflow ──
   const handleEditorPaste = useCallback(() => {
-    // Let the browser handle the paste natively, then clean up after a tick
     setTimeout(() => {
       if (!editorRef.current) return;
 
-      // Clean up all <li> elements: unwrap <span> wrappers
       editorRef.current.querySelectorAll('li').forEach(li => {
-        // Unwrap single-span children (Chrome/Google Docs/Word artifact)
         if (li.children.length === 1 && li.children[0].tagName === 'SPAN') {
           const span = li.children[0];
           if (!span.className && !span.id) {
@@ -719,7 +665,6 @@ export default function ContentOps() {
         li.setAttribute('role', 'listitem');
       });
 
-      // Clean ul/ol
       editorRef.current.querySelectorAll('ul, ol').forEach(list => {
         list.removeAttribute('class');
         list.removeAttribute('style');
@@ -731,7 +676,7 @@ export default function ContentOps() {
   }, [syncFromEditor]);
 
   const handleEditorClick = (e) => {
-    trackCursorPosition(); // always update cursor position
+    trackCursorPosition();
     if (e.target.tagName === 'IMG') {
       const imgs = Array.from(editorRef.current.querySelectorAll('img'));
       setImageAltModal({ show: true, src: e.target.src, currentAlt: e.target.alt || '', index: imgs.indexOf(e.target), isUpload: false, file: null, error: '' });
@@ -752,7 +697,6 @@ export default function ContentOps() {
     }
   };
 
-  // ── Link modal ────────────────────────────────
   const openLinkModal = () => {
     saveRange();
     const sel = window.getSelection();
@@ -790,10 +734,6 @@ export default function ContentOps() {
     setShowLinkModal(false); setLinkUrl(''); setLinkText(''); setEditingLink(null);
   };
 
-  // ── Image upload via device ───────────────────
-  // We continuously track which editor child the cursor is in,
-  // so when the image button is clicked we already know the position.
-  // This avoids all issues with focus loss, React re-renders, and modals.
   const lastCursorChildIndexRef = useRef(-1);
 
   const trackCursorPosition = useCallback(() => {
@@ -803,7 +743,6 @@ export default function ContentOps() {
 
     const range = sel.getRangeAt(0);
 
-    // Verify cursor is inside the editor
     let check = range.startContainer;
     let insideEditor = false;
     while (check) {
@@ -812,7 +751,6 @@ export default function ContentOps() {
     }
     if (!insideEditor) return;
 
-    // Walk up from cursor to find the direct child of editorRef
     let node = range.startContainer;
     while (node && node.parentNode !== editorRef.current) {
       node = node.parentNode;
@@ -866,7 +804,6 @@ export default function ContentOps() {
       const children = editorRef.current.childNodes;
 
       if (idx >= 0 && idx < children.length) {
-        // Insert AFTER the block where cursor was
         const refNode = children[idx];
         if (refNode.nextSibling) {
           editorRef.current.insertBefore(img, refNode.nextSibling);
@@ -874,11 +811,9 @@ export default function ContentOps() {
           editorRef.current.appendChild(img);
         }
       } else {
-        // No cursor position tracked — append at end
         editorRef.current.appendChild(img);
       }
 
-      // Force immediate sync
       const newContent = editorRef.current.innerHTML;
       liveContentRef.current = newContent;
       setEditedContent(newContent);
@@ -914,7 +849,6 @@ export default function ContentOps() {
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
   };
 
-  // ── HTML source mode ──────────────────────────
   const switchToHtmlMode = () => { const html = flushEditorContent(); setHtmlSource(html); setEditMode('html'); };
 
   const applyHtmlSource = () => {
@@ -923,7 +857,6 @@ export default function ContentOps() {
     setEditMode('edit');
   };
 
-  // ── Copy HTML ─────────────────────────────────
   const copyHTMLToClipboard = () => {
     const html = flushEditorContent();
     const cleaned = sanitizeListHTML(html);
@@ -934,7 +867,6 @@ export default function ContentOps() {
     });
   };
 
-  // ── GSC helpers ───────────────────────────────
   const getGscKeywordsForBlog = (blog) => {
     if (!gscData?.data) return null;
     const slug = blog.fieldData.slug || blog.fieldData.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -1016,7 +948,6 @@ export default function ContentOps() {
     reader.readAsArrayBuffer(file);
   };
 
-  // ── API calls ─────────────────────────────────
   const saveConfig = () => {
     if (!config.anthropicKey || !config.braveKey || !config.webflowKey || !config.collectionId) {
       setStatus({ type: 'error', message: 'Fill all required fields' }); return;
@@ -1093,7 +1024,6 @@ export default function ContentOps() {
     } finally { setLoading(false); }
   };
 
-  // ── Smart Check ───────────────────────────────
   const analyzeBlog = async (blog) => {
     setSelectedBlog(blog);
     setLoading(true);
@@ -1106,6 +1036,8 @@ export default function ContentOps() {
     for (const f of ['excerpt','post-summary','summary','meta-description','description','seo-description']) {
       if (blog.fieldData[f]) { setMetaDescription(blog.fieldData[f]); setMetaFieldName(f); break; }
     }
+    setMetaTitle(blog.fieldData['meta-title'] || title);
+    setMetaSeoDescription(blog.fieldData['meta-description'] || blog.fieldData['excerpt'] || '');
 
     const gscInfo = getGscKeywordsForBlog(blog);
     const hasGsc = gscInfo?.hasKeywords && gscInfo.keywords.length > 0;
@@ -1114,14 +1046,12 @@ export default function ContentOps() {
 
     const original = blog.fieldData['post-body'] || '';
 
-    // Detect brand context from full blog content
     const brandHints = detectBrandContext(title, original);
-    // Check if TL;DR already exists
     const needsTldr = !hasTldr(original);
 
     try {
       const smartCheckCtrl = new AbortController();
-      const smartCheckTimer = setTimeout(() => smartCheckCtrl.abort(), 300000); // 5 min
+      const smartCheckTimer = setTimeout(() => smartCheckCtrl.abort(), 300000);
       const r = await fetch(`${BACKEND_URL}/api/smartcheck`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1174,11 +1104,6 @@ export default function ContentOps() {
     finally { setLoading(false); }
   };
 
-  // ── Anchor link helpers for Webflow publish ───
-  // Webflow CMS strips <a href="#hash"> links entirely — it only accepts absolute URLs.
-  // These helpers reconstruct the full live URL before the PATCH is sent.
-
-  // Find the live URL of the blog: GSC data first, then scan original content.
   const getBlogLiveUrl = (blog, originalContent) => {
     if (gscData?.data) {
       const slug = blog.fieldData.slug || blog.fieldData.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -1204,7 +1129,6 @@ export default function ContentOps() {
     return null;
   };
 
-  // Convert every #hash and app-origin/#hash link to a full absolute URL.
   const fixAnchorLinksForWebflow = (html, blogLiveUrl) => {
     if (!blogLiveUrl) return html;
     const parser = new DOMParser();
@@ -1224,7 +1148,6 @@ export default function ContentOps() {
     return root.innerHTML;
   };
 
-  // ── Publish ───────────────────────────────────
   const publishToWebflow = async () => {
     if (!result || !selectedBlog) return;
     if (!blogTitle.trim()) { setStatus({ type: 'error', message: 'Title empty' }); return; }
@@ -1239,7 +1162,10 @@ export default function ContentOps() {
     const blogLiveUrl = getBlogLiveUrl(selectedBlog, result?.originalContent);
     const fixedHtml = fixAnchorLinksForWebflow(sanitized, blogLiveUrl);
     const fieldData = { name: blogTitle.trim(), 'post-body': fixedHtml };
+    fieldData['meta-title'] = (metaTitle.trim() || blogTitle.trim());
     if (metaDescription.trim()) fieldData[metaFieldName] = metaDescription.trim();
+    if (metaSeoDescription.trim()) fieldData['meta-description'] = metaSeoDescription.trim();
+    if (metaSeoDescription.trim()) fieldData['excerpt'] = metaSeoDescription.trim();
 
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -1264,14 +1190,10 @@ export default function ContentOps() {
     }
   };
 
-  // ════════════════════════════════════════════════
-  // RENDER
-  // ════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <style>{EDITOR_STYLES}</style>
 
-      {/* Nav */}
       <nav className="bg-[#0f172a] border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -1290,7 +1212,6 @@ export default function ContentOps() {
       </nav>
 
       <div className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        {/* Status bar */}
         {status.message && (
           <div className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${status.type === 'error' ? 'bg-red-50 border border-red-200' : status.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
             {status.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" /> :
@@ -1300,7 +1221,6 @@ export default function ContentOps() {
           </div>
         )}
 
-        {/* HOME */}
         {view === 'home' && (
           <div className="text-center max-w-4xl mx-auto pt-12">
             <h1 className="text-5xl font-bold text-[#0f172a] mb-4">Smart Content <span className="text-[#0ea5e9]">Fact-Checking</span></h1>
@@ -1311,7 +1231,6 @@ export default function ContentOps() {
           </div>
         )}
 
-        {/* SETUP */}
         {view === 'setup' && (
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-xl p-8 border shadow-sm">
@@ -1347,7 +1266,6 @@ export default function ContentOps() {
           </div>
         )}
 
-        {/* DASHBOARD */}
         {view === 'dashboard' && (
           <div>
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -1397,7 +1315,6 @@ export default function ContentOps() {
           </div>
         )}
 
-        {/* REVIEW / EDITOR */}
         {view === 'review' && result && (
           <div className="space-y-4">
             {result.gscKeywordsUsed?.length > 0 && (
@@ -1411,7 +1328,6 @@ export default function ContentOps() {
               </div>
             )}
 
-            {/* Stats */}
             <div className="bg-white rounded-lg border p-3 flex items-center gap-4 flex-wrap text-sm">
               <span className="text-gray-600">{result.searchesUsed} searches</span>
               <span className="text-gray-600">{result.duration}s</span>
@@ -1422,19 +1338,18 @@ export default function ContentOps() {
               {result.fromCache && <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">cached</span>}
             </div>
 
-            {/* Title + Meta */}
+            {/* Title + meta fields — name=meta-title, excerpt=meta-description */}
             <div className="bg-white rounded-lg border p-4 space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Blog Title</label>
-                <input value={blogTitle} onChange={e => setBlogTitle(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" />
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Blog Title <span className="text-gray-400 normal-case font-normal">(updates: name + meta-title)</span></label>
+                <input value={blogTitle} onChange={e => { setBlogTitle(e.target.value); setMetaTitle(e.target.value); }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Meta Description <span className="text-gray-400 normal-case font-normal">({metaFieldName})</span></label>
-                <textarea value={metaDescription} onChange={e => setMetaDescription(e.target.value)} rows={2} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none" />
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Excerpt / Meta Description <span className="text-gray-400 normal-case font-normal">(updates: excerpt + meta-description)</span></label>
+                <textarea value={metaSeoDescription} onChange={e => { setMetaSeoDescription(e.target.value); setMetaDescription(e.target.value); }} rows={2} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none" />
               </div>
             </div>
 
-            {/* Mode tabs */}
             <div className="flex items-center gap-2">
               {[['edit', 'Edit', Eye], ['preview', 'Preview Changes', Search], ['html', 'HTML Source', Code]].map(([mode, label, Icon]) => (
                 <button key={mode} onClick={() => {
@@ -1453,10 +1368,8 @@ export default function ContentOps() {
               )}
             </div>
 
-            {/* EDIT MODE */}
             {editMode === 'edit' && (
               <div className="bg-white rounded-lg border shadow-sm">
-                {/* Toolbar */}
                 <div className="flex items-center gap-1 p-2 border-b bg-gray-50 rounded-t-lg flex-wrap sticky top-0 z-30 shadow-sm">
                   <button onClick={() => execCmd('bold')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Bold"><Bold className="w-4 h-4" /></button>
                   <button onClick={() => execCmd('italic')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Italic"><Italic className="w-4 h-4" /></button>
@@ -1509,7 +1422,6 @@ export default function ContentOps() {
               </div>
             )}
 
-            {/* PREVIEW MODE */}
             {editMode === 'preview' && (
               <div className="bg-white rounded-lg border shadow-sm">
                 <div className="co-editor" style={{ minHeight: 400 }}
@@ -1517,7 +1429,6 @@ export default function ContentOps() {
               </div>
             )}
 
-            {/* HTML SOURCE MODE */}
             {editMode === 'html' && (
               <div className="space-y-3">
                 <textarea
@@ -1533,7 +1444,6 @@ export default function ContentOps() {
               </div>
             )}
 
-            {/* Actions */}
             <div className="flex items-center gap-3 flex-wrap bg-white rounded-lg border p-4">
               <button onClick={publishToWebflow} disabled={loading} className="bg-green-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {loading ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
@@ -1548,7 +1458,6 @@ export default function ContentOps() {
           </div>
         )}
 
-        {/* SUCCESS */}
         {view === 'success' && (
           <div className="max-w-md mx-auto text-center py-16">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle className="w-10 h-10 text-green-600" /></div>
@@ -1560,7 +1469,6 @@ export default function ContentOps() {
         )}
       </div>
 
-      {/* MODALS */}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 space-y-3" onClick={e => e.stopPropagation()}>
@@ -1620,7 +1528,6 @@ export default function ContentOps() {
         </div>
       )}
 
-      {/* Footer */}
       <footer className="bg-[#0f172a] border-t border-gray-800 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2">
