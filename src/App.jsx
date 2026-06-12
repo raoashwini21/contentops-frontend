@@ -568,9 +568,40 @@ export default function ContentOps() {
     if (g) { try { setGscData(JSON.parse(g)); } catch {} }
   }, []);
 
+  // Lock widgets (tables, embeds, figures, iframes) so writers can't mangle them in contentEditable
+  const lockWidgets = (rootEl) => {
+    if (!rootEl) return;
+    rootEl.querySelectorAll('table, figure, iframe, video, embed, object, .w-embed, .w-widget, [class*="widget"]').forEach(el => {
+      el.setAttribute('contenteditable', 'false');
+      el.setAttribute('data-co-locked', '1');
+      el.style.outline = '1px dashed #c4b5fd';
+      el.style.outlineOffset = '2px';
+      el.style.cursor = 'not-allowed';
+      if (!el.previousElementSibling?.hasAttribute?.('data-co-lock-label')) {
+        el.title = 'Protected element — edited automatically, not manually';
+      }
+    });
+  };
+
+  const unlockWidgetsHTML = (html) => {
+    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+    const root = doc.body.firstChild;
+    root.querySelectorAll('[data-co-locked]').forEach(el => {
+      el.removeAttribute('contenteditable');
+      el.removeAttribute('data-co-locked');
+      el.removeAttribute('title');
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+      el.style.cursor = '';
+      if (!el.getAttribute('style')) el.removeAttribute('style');
+    });
+    return root.innerHTML;
+  };
+
   useEffect(() => {
     if (editMode === 'edit' && editorRef.current) {
       editorRef.current.innerHTML = editedContent;
+      lockWidgets(editorRef.current);
     }
   }, [editMode, contentVersion]);
 
@@ -603,7 +634,7 @@ export default function ContentOps() {
   const flushEditorContent = useCallback(() => {
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     if (editorRef.current) {
-      const html = editorRef.current.innerHTML;
+      const html = unlockWidgetsHTML(editorRef.current.innerHTML);
       liveContentRef.current = html;
       setEditedContent(html);
       return html;
@@ -1063,7 +1094,8 @@ export default function ContentOps() {
           braveKey: config.braveKey,
           gscKeywords: hasGsc ? gscInfo.keywords.map(k => ({ keyword: k.query, position: k.position, clicks: k.clicks })) : null,
           brandHints: brandHints.length > 0 ? brandHints : null,
-          addTldr: needsTldr
+          addTldr: needsTldr,
+          modelMode: 'hybrid' // 'hybrid' = Fable audits + Sonnet writes | 'fable' = max quality | 'sonnet' = cheapest
         })
       });
 
@@ -1088,7 +1120,10 @@ export default function ContentOps() {
         gscKeywordsUsed: hasGsc ? gscInfo.keywords : null,
         fromCache: data.fromCache || false,
         widgetsProtected: data.stats?.widgetsProtected || 0,
-        tldrAdded: needsTldr && data.tldrAdded
+        tldrAdded: needsTldr && data.tldrAdded,
+        changelog: data.changelog || [],
+        verified: data.verified || [],
+        widgetWarnings: data.widgetWarnings || []
       });
 
       setEditedContent(updated);
@@ -1317,6 +1352,42 @@ export default function ContentOps() {
 
         {view === 'review' && result && (
           <div className="space-y-4">
+            {result.widgetWarnings?.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                <p className="text-sm font-semibold text-red-800 mb-1">⚠ Widget warnings — check before publishing</p>
+                {result.widgetWarnings.map((w, i) => (
+                  <p key={i} className="text-xs text-red-700">{w}</p>
+                ))}
+              </div>
+            )}
+            {result.changelog?.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                <p className="text-sm font-semibold text-blue-900 mb-2">📋 What changed ({result.changelog.length})</p>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {result.changelog.map((c, i) => (
+                    <div key={i} className="text-xs bg-white rounded border border-blue-100 p-2">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mr-1.5 ${
+                        c.type === 'fix' ? 'bg-amber-100 text-amber-800' :
+                        c.type === 'add' ? 'bg-emerald-100 text-emerald-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>{c.type.toUpperCase()}</span>
+                      <span className="font-medium text-gray-700">{c.where}</span>
+                      <p className="text-gray-600 mt-1">{c.reason}</p>
+                      {c.from && <p className="text-red-600 mt-0.5 line-through">{c.from}</p>}
+                      {c.to && <p className="text-emerald-700 mt-0.5">{c.to}</p>}
+                    </div>
+                  ))}
+                </div>
+                {result.verified?.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-2">✓ Verified, no change needed: {result.verified.join(' · ')}</p>
+                )}
+              </div>
+            )}
+            {result.changelog?.length === 0 && result.searchesUsed > 0 && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
+                <p className="text-sm text-emerald-800">✓ Audit found nothing outdated — blog is current.</p>
+              </div>
+            )}
             {result.gscKeywordsUsed?.length > 0 && (
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                 <p className="text-sm font-semibold text-purple-800 mb-2">Optimized with {result.gscKeywordsUsed.length} GSC keywords</p>
