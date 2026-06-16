@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye, Copy, Bold, Italic, List, ListOrdered, Link2, ImagePlus, Type, Undo2, ChevronDown, Upload } from 'lucide-react';
 
-const BACKEND_URL = 'https://test-backend-production-f29b.up.railway.app';
+const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
 // ── Normalize browser-absolutized anchor hrefs ──
 // The browser resolves #anchor hrefs to absolute URLs inside contenteditable.
