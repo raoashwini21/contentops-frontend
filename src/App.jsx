@@ -495,6 +495,103 @@ const sanitizeListHTML = (html) => {
   return root.innerHTML;
 };
 
+// ── Block editor helpers ──────────────────────
+// Widget = anything the browser must never edit. Rendered as a locked shell;
+// its ORIGINAL html string is stored and returned verbatim on save.
+const WIDGET_TAGS = ['TABLE', 'IFRAME', 'VIDEO', 'EMBED', 'OBJECT', 'SCRIPT', 'STYLE', 'FORM'];
+function isWidgetElement(el) {
+  if (!el || el.nodeType !== 1) return false;
+  if (WIDGET_TAGS.includes(el.tagName)) return true;
+  if (el.querySelector && el.querySelector('iframe,video,embed,object,script,table,form')) return true;
+  if (el.tagName === 'DIV' && !el.classList.contains('tldr-box')) return true;
+  const cls = typeof el.className === 'string' ? el.className : '';
+  if (/widget|w-embed|w-widget/i.test(cls)) return true;
+  return false;
+}
+
+function widgetLabel(el) {
+  if (el.tagName === 'TABLE' || el.querySelector?.('table')) return 'table';
+  if (el.tagName === 'IFRAME' || el.querySelector?.('iframe')) return 'video / embed';
+  if (el.tagName === 'VIDEO' || el.querySelector?.('video')) return 'video';
+  return 'embed';
+}
+
+// Balance <strong>/<em>/<b>/<i>/<u> within one block so an unclosed tag can
+// never bleed past its own paragraph (the "everything turns bold" bug).
+function balanceInlineInBlock(html) {
+  let fixed = html;
+  for (const t of ['strong', 'em', 'b', 'i', 'u']) {
+    const opens = (fixed.match(new RegExp(`<${t}(?:\\s[^>]*)?>`, 'gi')) || []).length;
+    const closes = (fixed.match(new RegExp(`</${t}>`, 'gi')) || []).length;
+    if (opens > closes) fixed += `</${t}>`.repeat(opens - closes);
+    else if (closes > opens) {
+      let extra = closes - opens;
+      fixed = fixed.replace(new RegExp(`</${t}>`, 'gi'), m => (extra-- > 0 ? '' : m));
+    }
+  }
+  return fixed;
+}
+
+// Clean one text block for saving: strip editor attrs, fix list roles,
+// unwrap browser junk, balance inline tags. Returns clean outerHTML or ''.
+function blockCleanHTML(el) {
+  const clone = el.cloneNode(true);
+  clone.removeAttribute('contenteditable');
+  clone.removeAttribute('data-co-bid');
+  clone.classList.remove('co-block', 'co-edited');
+  if (!clone.className) clone.removeAttribute('class');
+  // browser-inserted junk inside blocks: divs/spans from execCommand
+  clone.querySelectorAll('div').forEach(d => {
+    const p = document.createElement('p');
+    p.innerHTML = d.innerHTML;
+    d.replaceWith(...(d.closest('li') ? d.childNodes : [p]));
+  });
+  clone.querySelectorAll('span').forEach(s => {
+    if (!s.className && !s.id && !s.getAttribute('style')) s.replaceWith(...s.childNodes);
+  });
+  // list hygiene: only <li> children, role attrs (Webflow requirement)
+  if (clone.tagName === 'UL' || clone.tagName === 'OL') {
+    clone.setAttribute('role', 'list');
+    Array.from(clone.children).forEach(c => {
+      if (c.tagName !== 'LI') { const li = document.createElement('li'); li.innerHTML = c.outerHTML; c.replaceWith(li); }
+    });
+    clone.querySelectorAll('li').forEach(li => li.setAttribute('role', 'listitem'));
+    if (!clone.querySelector('li')) return '';
+  }
+  // drop empty blocks
+  const isEmpty = !clone.textContent.trim() && !clone.querySelector('img,iframe,video,embed');
+  if (isEmpty) return '';
+  return balanceInlineInBlock(clone.outerHTML);
+}
+
+// ── Table editing: parse to structured data, rebuild deterministically ──
+// A table edited through structured data can never be malformed HTML.
+function getAttrString(el) {
+  return Array.from(el.attributes || []).map(a => ` ${a.name}="${String(a.value).replace(/"/g, '&quot;')}"`).join('');
+}
+function parseTableHTML(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const table = doc.querySelector('table');
+  if (!table) return null;
+  const rows = Array.from(table.querySelectorAll('tr')).map(tr => ({
+    cells: Array.from(tr.children).filter(c => /^(TD|TH)$/.test(c.tagName)).map(c => ({
+      tag: c.tagName.toLowerCase(),
+      attrs: getAttrString(c),
+      html: c.innerHTML,
+    })),
+  })).filter(r => r.cells.length);
+  if (!rows.length) return null;
+  return { attrs: getAttrString(table), rows, hasThead: !!table.querySelector('thead') };
+}
+function buildTableHTML({ attrs, rows, hasThead }) {
+  const rowHTML = r => `<tr>${r.cells.map(c => `<${c.tag}${c.attrs}>${c.html}</${c.tag}>`).join('')}</tr>`;
+  if (hasThead && rows.length > 1) {
+    return `<table${attrs}><thead>${rowHTML(rows[0])}</thead><tbody>${rows.slice(1).map(rowHTML).join('')}</tbody></table>`;
+  }
+  if (hasThead && rows.length === 1) return `<table${attrs}><thead>${rowHTML(rows[0])}</thead></table>`;
+  return `<table${attrs}><tbody>${rows.map(rowHTML).join('')}</tbody></table>`;
+}
+
 // ── Editor CSS ──────────────────────────────────
 const EDITOR_STYLES = `
   .co-editor { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.7; color: #1a1a1a; padding: 32px; min-height: 600px; outline: none; }
@@ -522,6 +619,23 @@ const EDITOR_STYLES = `
   .co-editor * { max-width: 100%; box-sizing: border-box; }
   .co-editor .tldr-box { background: #f0f9ff; border: 1px solid #bae6fd; border-left: 4px solid #0ea5e9; border-radius: 8px; padding: 16px 20px; margin: 1rem 0 1.5rem 0; }
   .co-editor .tldr-box strong { color: #0369a1; }
+
+  /* ── Block editor ── */
+  .co-editor .co-block { position: relative; border-left: 3px solid transparent; padding-left: 9px; margin-left: -12px; outline: none; border-radius: 2px; transition: background .12s, border-color .12s; }
+  .co-editor .co-block:focus { border-left-color: #bae6fd; background: #f8fbff; }
+  .co-editor .co-block.co-edited { border-left-color: #0ea5e9; background: #eff8ff; }
+  .co-editor .co-block.co-edited::after { content: 'edited'; position: absolute; right: 6px; top: 2px; font-size: 10px; font-weight: 600; color: #0284c7; background: #e0f2fe; padding: 1px 7px; border-radius: 99px; pointer-events: none; }
+  .co-widget-shell { margin: 1rem 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafbfc; padding: 10px; user-select: none; cursor: default; }
+  .co-widget-label { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #64748b; margin-bottom: 8px; display: flex; gap: 6px; align-items: center; text-transform: uppercase; }
+  .co-widget-shell iframe { width: 100% !important; aspect-ratio: 16/9; height: auto !important; min-height: 320px; border: 0; }
+  .co-widget-shell video { width: 100%; height: auto; }
+  .co-widget-shell table { pointer-events: none; }
+  .co-widget-label { justify-content: space-between; }
+  .co-widget-actions { display: inline-flex; gap: 6px; }
+  .co-widget-actions button { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; text-transform: none; letter-spacing: 0; }
+  .co-widget-actions button:hover { border-color: #0ea5e9; color: #0ea5e9; }
+  .co-widget-shell.co-edited { border-color: #0ea5e9; background: #f0f9ff; }
+  .co-widget-shell.co-edited .co-widget-label::before { content: 'edited · '; color: #0284c7; }
 `;
 
 export default function ContentOps() {
@@ -550,6 +664,8 @@ export default function ContentOps() {
   const [linkText, setLinkText] = useState('');
   const [editingLink, setEditingLink] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
+  const [tableEditor, setTableEditor] = useState({ show: false, wid: null, attrs: '', hasThead: false, rows: [] });
+  const [embedEditor, setEmbedEditor] = useState({ show: false, wid: null, html: '', error: '' });
   const [editMode, setEditMode] = useState('edit');
   const [showHighlights, setShowHighlights] = useState(true);
   const [showHeadingMenu, setShowHeadingMenu] = useState(false);
@@ -568,40 +684,75 @@ export default function ContentOps() {
     if (g) { try { setGscData(JSON.parse(g)); } catch {} }
   }, []);
 
-  // Lock widgets (tables, embeds, figures, iframes) so writers can't mangle them in contentEditable
-  const lockWidgets = (rootEl) => {
-    if (!rootEl) return;
-    rootEl.querySelectorAll('table, figure, iframe, video, embed, object, .w-embed, .w-widget, [class*="widget"]').forEach(el => {
-      el.setAttribute('contenteditable', 'false');
-      el.setAttribute('data-co-locked', '1');
-      el.style.outline = '1px dashed #c4b5fd';
-      el.style.outlineOffset = '2px';
-      el.style.cursor = 'not-allowed';
-      if (!el.previousElementSibling?.hasAttribute?.('data-co-lock-label')) {
-        el.title = 'Protected element — edited automatically, not manually';
-      }
-    });
+  // ══════════════════════════════════════════════
+  // BLOCK-BASED EDITOR
+  // The container is NOT editable. Each paragraph/heading/list is its own
+  // small contentEditable island. Widgets/tables/videos are locked shells —
+  // their original HTML is stored in widgetStoreRef and returned VERBATIM
+  // on save, so the browser can never alter them.
+  // ══════════════════════════════════════════════
+  const widgetStoreRef = useRef(new Map());   // wid → current html string (returned verbatim on save)
+  const widgetOrigRef = useRef(new Map());    // wid → html at load (for edited-highlight)
+  const blockOrigRef = useRef(new Map());     // bid → original clean html (for edit-highlight)
+  const lastFocusedBlockRef = useRef(null);
+  const blockSeqRef = useRef(0);
+
+  const makeTextBlockAttrs = (el, bid) => {
+    el.classList.add('co-block');
+    el.setAttribute('contenteditable', 'true');
+    el.setAttribute('data-co-bid', bid);
   };
 
-  const unlockWidgetsHTML = (html) => {
-    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
-    const root = doc.body.firstChild;
-    root.querySelectorAll('[data-co-locked]').forEach(el => {
-      el.removeAttribute('contenteditable');
-      el.removeAttribute('data-co-locked');
-      el.removeAttribute('title');
-      el.style.outline = '';
-      el.style.outlineOffset = '';
-      el.style.cursor = '';
-      if (!el.getAttribute('style')) el.removeAttribute('style');
+  const buildEditorDOM = useCallback((html) => {
+    const container = editorRef.current;
+    if (!container) return;
+    widgetStoreRef.current = new Map();
+    widgetOrigRef.current = new Map();
+    blockOrigRef.current = new Map();
+    const doc = new DOMParser().parseFromString(`<div id="__co_root">${html || '<p><br></p>'}</div>`, 'text/html');
+    const root = doc.getElementById('__co_root');
+    const parts = [];
+    let wid = 0;
+
+    Array.from(root.childNodes).forEach(node => {
+      if (node.nodeType === 3) {
+        const t = node.textContent.trim();
+        if (!t) return;
+        const p = doc.createElement('p'); p.textContent = t; node = p;
+      }
+      if (node.nodeType !== 1) return;
+
+      if (isWidgetElement(node)) {
+        const id = 'w' + (wid++);
+        widgetStoreRef.current.set(id, node.outerHTML);
+        widgetOrigRef.current.set(id, node.outerHTML);
+        const isTable = node.tagName === 'TABLE' || !!node.querySelector?.('table');
+        parts.push(
+          `<div class="co-widget-shell" contenteditable="false" data-co-wid="${id}">` +
+          `<div class="co-widget-label"><span>🔒 ${widgetLabel(node)} — protected</span>` +
+          `<span class="co-widget-actions">` +
+          `<button type="button" data-co-action="edit" data-co-target="${id}">${isTable ? '✏️ Edit table' : '</> Edit embed'}</button>` +
+          `<button type="button" data-co-action="delete" data-co-target="${id}">🗑</button>` +
+          `</span></div>` +
+          node.outerHTML + `</div>`
+        );
+      } else {
+        const bid = 'b' + (blockSeqRef.current++);
+        makeTextBlockAttrs(node, bid);
+        parts.push(node.outerHTML);
+      }
     });
-    return root.innerHTML;
-  };
+
+    container.innerHTML = parts.join('\n') || '<p class="co-block" contenteditable="true" data-co-bid="b0"><br></p>';
+    // snapshot originals for edit-highlighting
+    container.querySelectorAll('.co-block').forEach(b => {
+      blockOrigRef.current.set(b.getAttribute('data-co-bid'), blockCleanHTML(b));
+    });
+  }, []);
 
   useEffect(() => {
     if (editMode === 'edit' && editorRef.current) {
-      editorRef.current.innerHTML = editedContent;
-      lockWidgets(editorRef.current);
+      buildEditorDOM(editedContent);
     }
   }, [editMode, contentVersion]);
 
@@ -621,61 +772,205 @@ export default function ContentOps() {
   const liveContentRef = useRef('');
   const syncTimerRef = useRef(null);
 
+  // Deterministic reassembly: widgets come back from the store VERBATIM,
+  // text blocks come from the DOM, cleaned per-block.
+  const assembleContent = useCallback(() => {
+    const container = editorRef.current;
+    if (!container) return liveContentRef.current || editedContent;
+    const parts = [];
+    Array.from(container.children).forEach(child => {
+      if (child.classList?.contains('co-widget-shell')) {
+        const orig = widgetStoreRef.current.get(child.getAttribute('data-co-wid'));
+        if (orig) parts.push(orig);
+      } else if (child.classList?.contains('co-block')) {
+        const html = blockCleanHTML(child);
+        if (html) parts.push(html);
+      }
+    });
+    return parts.join('\n');
+  }, [editedContent]);
+
   const syncFromEditor = useCallback(() => {
-    if (editorRef.current) {
-      liveContentRef.current = editorRef.current.innerHTML;
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-      syncTimerRef.current = setTimeout(() => {
-        setEditedContent(liveContentRef.current);
-      }, 500);
-    }
-  }, []);
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      const html = assembleContent();
+      liveContentRef.current = html;
+      setEditedContent(html);
+    }, 500);
+  }, [assembleContent]);
 
   const flushEditorContent = useCallback(() => {
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    if (editorRef.current) {
-      const html = unlockWidgetsHTML(editorRef.current.innerHTML);
-      liveContentRef.current = html;
-      setEditedContent(html);
-      return html;
+    const html = assembleContent();
+    liveContentRef.current = html;
+    setEditedContent(html);
+    return html;
+  }, [assembleContent]);
+
+  // per-block input: refresh edit-highlight, then debounced sync
+  const handleBlockInput = useCallback((e) => {
+    const block = e.target?.closest?.('.co-block');
+    if (block) {
+      const bid = block.getAttribute('data-co-bid');
+      const orig = blockOrigRef.current.get(bid);
+      block.classList.toggle('co-edited', blockCleanHTML(block) !== orig);
     }
-    return liveContentRef.current || editedContent;
-  }, [editedContent]);
+    syncFromEditor();
+  }, [syncFromEditor]);
+
+  const handleEditorFocusIn = useCallback((e) => {
+    const block = e.target?.closest?.('.co-block');
+    if (block) lastFocusedBlockRef.current = block;
+  }, []);
+
+  // Enter splits into a new block; Backspace on an empty block removes it.
+  // Inside lists, Enter behaves natively (new <li>) except on an empty item,
+  // which exits the list into a fresh paragraph block.
+  const handleEditorKeyDown = useCallback((e) => {
+    const block = e.target?.closest?.('.co-block');
+    if (!block) return;
+    const isList = block.tagName === 'UL' || block.tagName === 'OL';
+    const sel = window.getSelection();
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (isList) {
+        const li = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement)?.closest?.('li');
+        if (li && !li.textContent.trim()) {
+          e.preventDefault();
+          li.remove();
+          const bid = 'b' + (blockSeqRef.current++);
+          const p = document.createElement('p');
+          makeTextBlockAttrs(p, bid);
+          p.innerHTML = '<br>';
+          block.after(p);
+          blockOrigRef.current.set(bid, '');
+          if (!block.querySelector('li')) block.remove();
+          const r = document.createRange(); r.setStart(p, 0); r.collapse(true);
+          sel.removeAllRanges(); sel.addRange(r); p.focus();
+          syncFromEditor();
+        }
+        return; // native <li> behavior otherwise
+      }
+      e.preventDefault();
+      const range = sel.getRangeAt(0);
+      const after = range.cloneRange();
+      after.selectNodeContents(block);
+      after.setStart(range.endContainer, range.endOffset);
+      const frag = after.extractContents();
+      const bid = 'b' + (blockSeqRef.current++);
+      const p = document.createElement('p');
+      makeTextBlockAttrs(p, bid);
+      p.appendChild(frag);
+      if (!p.textContent.trim() && !p.querySelector('img')) p.innerHTML = '<br>';
+      if (!block.textContent.trim() && !block.querySelector('img')) block.innerHTML = '<br>';
+      block.after(p);
+      blockOrigRef.current.set(bid, '');
+      p.classList.toggle('co-edited', blockCleanHTML(p) !== '');
+      const r = document.createRange(); r.setStart(p, 0); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r); p.focus();
+      syncFromEditor();
+      return;
+    }
+
+    if (e.key === 'Backspace' && !isList) {
+      const empty = !block.textContent.trim() && !block.querySelector('img,iframe,video');
+      if (empty) {
+        e.preventDefault();
+        let prev = block.previousElementSibling;
+        while (prev && !prev.classList.contains('co-block')) prev = prev.previousElementSibling;
+        block.remove();
+        if (prev) {
+          prev.focus();
+          const r = document.createRange();
+          r.selectNodeContents(prev); r.collapse(false);
+          sel.removeAllRanges(); sel.addRange(r);
+        }
+        syncFromEditor();
+      }
+    }
+  }, [syncFromEditor]);
 
   const execCmd = (cmd, val) => {
-    editorRef.current?.focus();
+    // operates within the focused block island — safe by construction
     document.execCommand(cmd, false, val || null);
+    const block = lastFocusedBlockRef.current;
+    if (block?.isConnected) {
+      const bid = block.getAttribute('data-co-bid');
+      block.classList.toggle('co-edited', blockCleanHTML(block) !== blockOrigRef.current.get(bid));
+    }
     syncFromEditor();
   };
 
-  const formatHeading = (level) => {
-    if (!editorRef.current) return;
+  const currentBlock = () => {
     const sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    let block = sel.getRangeAt(0).startContainer;
-    while (block && block !== editorRef.current) {
-      if (block.nodeType === 1 && /^(P|DIV|H[1-6]|LI)$/.test(block.tagName)) break;
-      block = block.parentNode;
+    if (sel.rangeCount) {
+      let n = sel.getRangeAt(0).startContainer;
+      const el = n.nodeType === 1 ? n : n.parentElement;
+      const b = el?.closest?.('.co-block');
+      if (b) return b;
     }
-    if (!block || block === editorRef.current) return;
+    return lastFocusedBlockRef.current?.isConnected ? lastFocusedBlockRef.current : null;
+  };
 
-    if (block.tagName === `H${level}`) {
-      const p = document.createElement('p');
-      p.innerHTML = block.innerHTML;
-      block.parentNode.replaceChild(p, block);
-    } else {
-      const h = document.createElement(`h${level}`);
-      h.innerHTML = block.innerHTML;
-      if (block.id) h.id = block.id;
-      if (block.className) h.className = block.className;
-      block.parentNode.replaceChild(h, block);
-    }
+  const formatHeading = (level) => {
+    const block = currentBlock();
+    if (!block || block.tagName === 'UL' || block.tagName === 'OL') { setShowHeadingMenu(false); return; }
+    const targetTag = block.tagName === `H${level}` ? 'p' : `h${level}`;
+    const bid = block.getAttribute('data-co-bid');
+    const next = document.createElement(targetTag);
+    next.innerHTML = block.innerHTML;
+    if (block.id) next.id = block.id;
+    makeTextBlockAttrs(next, bid);
+    block.replaceWith(next);
+    next.classList.toggle('co-edited', blockCleanHTML(next) !== blockOrigRef.current.get(bid));
+    next.focus();
+    lastFocusedBlockRef.current = next;
     syncFromEditor();
     setShowHeadingMenu(false);
   };
 
   const insertListCmd = (type) => {
-    execCmd(type === 'bullet' ? 'insertUnorderedList' : 'insertOrderedList');
+    const block = currentBlock();
+    if (!block) return;
+    const bid = block.getAttribute('data-co-bid');
+
+    if (block.tagName === 'UL' || block.tagName === 'OL') {
+      // list → paragraphs (one per item)
+      const frag = document.createDocumentFragment();
+      let firstP = null;
+      block.querySelectorAll(':scope > li').forEach(li => {
+        const nb = 'b' + (blockSeqRef.current++);
+        const p = document.createElement('p');
+        makeTextBlockAttrs(p, nb);
+        p.innerHTML = li.innerHTML || '<br>';
+        blockOrigRef.current.set(nb, '');
+        p.classList.add('co-edited');
+        frag.appendChild(p);
+        if (!firstP) firstP = p;
+      });
+      block.replaceWith(frag);
+      firstP?.focus();
+      if (firstP) lastFocusedBlockRef.current = firstP;
+    } else {
+      // paragraph/heading → list with one item
+      const list = document.createElement(type === 'bullet' ? 'ul' : 'ol');
+      list.setAttribute('role', 'list');
+      makeTextBlockAttrs(list, bid);
+      const li = document.createElement('li');
+      li.setAttribute('role', 'listitem');
+      li.innerHTML = block.innerHTML || '<br>';
+      list.appendChild(li);
+      block.replaceWith(list);
+      list.classList.toggle('co-edited', blockCleanHTML(list) !== blockOrigRef.current.get(bid));
+      // caret into the li
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.selectNodeContents(li); r.collapse(false);
+      sel.removeAllRanges(); sel.addRange(r);
+      list.focus();
+      lastFocusedBlockRef.current = list;
+    }
+    syncFromEditor();
   };
 
   const handleEditorPaste = useCallback(() => {
@@ -706,10 +1001,94 @@ export default function ContentOps() {
     }, 50);
   }, [syncFromEditor]);
 
+  // ── Widget editing (tables + embeds) ──
+  const refreshShell = (wid) => {
+    const shell = editorRef.current?.querySelector(`[data-co-wid="${wid}"]`);
+    if (!shell) return;
+    const html = widgetStoreRef.current.get(wid) || '';
+    const label = shell.querySelector('.co-widget-label');
+    // keep label bar, replace widget body
+    shell.innerHTML = '';
+    if (label) shell.appendChild(label);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    Array.from(tmp.childNodes).forEach(n => shell.appendChild(n));
+    shell.classList.toggle('co-edited', html !== widgetOrigRef.current.get(wid));
+    flushEditorContent();
+  };
+
+  const openWidgetEditor = (wid) => {
+    const html = widgetStoreRef.current.get(wid);
+    if (!html) return;
+    const parsed = parseTableHTML(html);
+    if (parsed) {
+      setTableEditor({ show: true, wid, attrs: parsed.attrs, hasThead: parsed.hasThead, rows: parsed.rows });
+    } else {
+      setEmbedEditor({ show: true, wid, html, error: '' });
+    }
+  };
+
+  const deleteWidget = (wid) => {
+    if (!confirm('Delete this element? This removes it from the blog.')) return;
+    editorRef.current?.querySelector(`[data-co-wid="${wid}"]`)?.remove();
+    widgetStoreRef.current.delete(wid);
+    flushEditorContent();
+  };
+
+  const saveTableEdit = () => {
+    const { wid, attrs, hasThead, rows } = tableEditor;
+    const clean = rows
+      .map(r => ({ cells: r.cells.map(c => ({ ...c, html: balanceInlineInBlock(c.html) })) }))
+      .filter(r => r.cells.length);
+    if (!clean.length) { setStatus({ type: 'error', message: 'Table needs at least one row' }); return; }
+    widgetStoreRef.current.set(wid, buildTableHTML({ attrs, hasThead, rows: clean }));
+    setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [] });
+    refreshShell(wid);
+  };
+
+  const saveEmbedEdit = () => {
+    const { wid, html } = embedEditor;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const els = Array.from(doc.body.children);
+    if (!els.length) { setEmbedEditor(m => ({ ...m, error: 'Must be valid HTML with at least one element' })); return; }
+    const stray = Array.from(doc.body.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
+    if (stray) { setEmbedEditor(m => ({ ...m, error: 'Loose text outside tags — wrap everything in elements' })); return; }
+    widgetStoreRef.current.set(wid, els.map(e => e.outerHTML).join('\n'));
+    setEmbedEditor({ show: false, wid: null, html: '', error: '' });
+    refreshShell(wid);
+  };
+
+  const tableCell = (ri, ci, html) => setTableEditor(t => {
+    const rows = t.rows.map((r, i) => i !== ri ? r : { cells: r.cells.map((c, j) => j !== ci ? c : { ...c, html }) });
+    return { ...t, rows };
+  });
+  const tableAddRow = () => setTableEditor(t => {
+    const cols = t.rows[0]?.cells.length || 2;
+    return { ...t, rows: [...t.rows, { cells: Array.from({ length: cols }, () => ({ tag: 'td', attrs: '', html: '' })) }] };
+  });
+  const tableAddCol = () => setTableEditor(t => ({
+    ...t, rows: t.rows.map((r, i) => ({ cells: [...r.cells, { tag: i === 0 && t.hasThead ? 'th' : 'td', attrs: '', html: '' }] })),
+  }));
+  const tableDelRow = (ri) => setTableEditor(t => ({ ...t, rows: t.rows.filter((_, i) => i !== ri) }));
+  const tableDelCol = (ci) => setTableEditor(t => ({ ...t, rows: t.rows.map(r => ({ cells: r.cells.filter((_, j) => j !== ci) })) }));
+
+  // images the writer may edit = images NOT inside locked widget shells
+  const editableImages = () =>
+    Array.from(editorRef.current?.querySelectorAll('img') || [])
+      .filter(img => !img.closest('.co-widget-shell'));
+
   const handleEditorClick = (e) => {
-    trackCursorPosition();
+    const actionBtn = e.target.closest?.('[data-co-action]');
+    if (actionBtn) {
+      e.preventDefault();
+      const wid = actionBtn.getAttribute('data-co-target');
+      if (actionBtn.getAttribute('data-co-action') === 'delete') deleteWidget(wid);
+      else openWidgetEditor(wid);
+      return;
+    }
+    if (e.target.closest?.('.co-widget-shell')) return; // locked — view only
     if (e.target.tagName === 'IMG') {
-      const imgs = Array.from(editorRef.current.querySelectorAll('img'));
+      const imgs = editableImages();
       setImageAltModal({ show: true, src: e.target.src, currentAlt: e.target.alt || '', index: imgs.indexOf(e.target), isUpload: false, file: null, error: '' });
       return;
     }
@@ -765,34 +1144,6 @@ export default function ContentOps() {
     setShowLinkModal(false); setLinkUrl(''); setLinkText(''); setEditingLink(null);
   };
 
-  const lastCursorChildIndexRef = useRef(-1);
-
-  const trackCursorPosition = useCallback(() => {
-    if (!editorRef.current) return;
-    const sel = window.getSelection();
-    if (!sel.rangeCount) return;
-
-    const range = sel.getRangeAt(0);
-
-    let check = range.startContainer;
-    let insideEditor = false;
-    while (check) {
-      if (check === editorRef.current) { insideEditor = true; break; }
-      check = check.parentNode;
-    }
-    if (!insideEditor) return;
-
-    let node = range.startContainer;
-    while (node && node.parentNode !== editorRef.current) {
-      node = node.parentNode;
-    }
-
-    if (node && node.parentNode === editorRef.current) {
-      const children = Array.from(editorRef.current.childNodes);
-      lastCursorChildIndexRef.current = children.indexOf(node);
-    }
-  }, []);
-
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -823,31 +1174,27 @@ export default function ContentOps() {
         reader.readAsDataURL(imageAltModal.file);
       });
 
+      if (!editorRef.current) throw new Error('Editor not available');
+
+      // insert as its OWN block after the last-focused block (or at the end)
       const img = document.createElement('img');
       img.src = dataUrl;
       img.alt = imageAltModal.currentAlt.trim();
       img.loading = 'lazy';
-      img.style.cssText = 'max-width:100%;height:auto;display:block;margin:1rem 0;border-radius:6px';
+      img.style.cssText = 'max-width:100%;height:auto;display:block;margin:0.5rem 0;border-radius:6px';
 
-      if (!editorRef.current) throw new Error('Editor not available');
+      const bid = 'b' + (blockSeqRef.current++);
+      const p = document.createElement('p');
+      makeTextBlockAttrs(p, bid);
+      p.appendChild(img);
+      blockOrigRef.current.set(bid, '');
+      p.classList.add('co-edited');
 
-      const idx = lastCursorChildIndexRef.current;
-      const children = editorRef.current.childNodes;
+      const anchor = lastFocusedBlockRef.current?.isConnected ? lastFocusedBlockRef.current : null;
+      if (anchor) anchor.after(p);
+      else editorRef.current.appendChild(p);
 
-      if (idx >= 0 && idx < children.length) {
-        const refNode = children[idx];
-        if (refNode.nextSibling) {
-          editorRef.current.insertBefore(img, refNode.nextSibling);
-        } else {
-          editorRef.current.appendChild(img);
-        }
-      } else {
-        editorRef.current.appendChild(img);
-      }
-
-      const newContent = editorRef.current.innerHTML;
-      liveContentRef.current = newContent;
-      setEditedContent(newContent);
+      flushEditorContent();
 
       URL.revokeObjectURL(imageAltModal.src);
       setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
@@ -861,9 +1208,11 @@ export default function ContentOps() {
 
   const updateImageAlt = () => {
     if (imageAltModal.isUpload) { insertUploadedImage(); return; }
-    const imgs = editorRef.current?.querySelectorAll('img');
+    const imgs = editableImages();
     if (imgs?.[imageAltModal.index]) {
       imgs[imageAltModal.index].alt = imageAltModal.currentAlt;
+      const b = imgs[imageAltModal.index].closest('.co-block');
+      if (b) b.classList.toggle('co-edited', blockCleanHTML(b) !== blockOrigRef.current.get(b.getAttribute('data-co-bid')));
       syncFromEditor();
     }
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
@@ -871,10 +1220,12 @@ export default function ContentOps() {
 
   const deleteImage = () => {
     if (!confirm('Delete this image?')) return;
-    const imgs = editorRef.current?.querySelectorAll('img');
+    const imgs = editableImages();
     if (imgs?.[imageAltModal.index]) {
       const img = imgs[imageAltModal.index];
+      const block = img.closest('.co-block');
       (img.closest('figure') || img).remove();
+      if (block && !block.textContent.trim() && !block.querySelector('img')) block.remove();
       syncFromEditor();
     }
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
@@ -1481,15 +1832,17 @@ export default function ContentOps() {
                 <div
                   ref={editorRef}
                   className="co-editor"
-                  contentEditable
-                  suppressContentEditableWarning
-                  onInput={syncFromEditor}
+                  onInput={handleBlockInput}
                   onClick={handleEditorClick}
-                  onKeyUp={trackCursorPosition}
-                  onMouseUp={trackCursorPosition}
+                  onKeyDown={handleEditorKeyDown}
+                  onFocus={handleEditorFocusIn}
                   onPaste={handleEditorPaste}
                   style={{ minHeight: 600 }}
                 />
+                <div className="px-4 py-2 border-t bg-gray-50 rounded-b-lg text-xs text-gray-500 flex items-center gap-4">
+                  <span>🔒 Tables, videos & embeds are protected — use their ✏️ Edit buttons to change them safely</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500" /> blue edge = your edit</span>
+                </div>
               </div>
             )}
 
@@ -1539,6 +1892,81 @@ export default function ContentOps() {
           </div>
         )}
       </div>
+
+      {tableEditor.show && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800">✏️ Edit table</h3>
+              <div className="flex gap-2">
+                <button onClick={tableAddRow} className="text-xs px-3 py-1.5 rounded-lg border hover:border-sky-400 hover:text-sky-600">+ Row</button>
+                <button onClick={tableAddCol} className="text-xs px-3 py-1.5 rounded-lg border hover:border-sky-400 hover:text-sky-600">+ Column</button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto flex-1">
+              <table className="w-full border-collapse">
+                <tbody>
+                  <tr>
+                    {tableEditor.rows[0]?.cells.map((_, ci) => (
+                      <td key={`del-${ci}`} className="text-center pb-1">
+                        <button onClick={() => tableDelCol(ci)} className="text-[10px] text-gray-400 hover:text-red-500" title="Delete column">✕ col</button>
+                      </td>
+                    ))}
+                    <td />
+                  </tr>
+                  {tableEditor.rows.map((row, ri) => (
+                    <tr key={ri}>
+                      {row.cells.map((cell, ci) => (
+                        <td key={ci} className="border border-gray-200 p-0 align-top">
+                          <textarea
+                            value={cell.html}
+                            onChange={e => tableCell(ri, ci, e.target.value)}
+                            rows={2}
+                            className={`w-full min-w-[120px] p-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-sky-300 ${cell.tag === 'th' ? 'font-semibold bg-gray-50' : ''}`}
+                          />
+                        </td>
+                      ))}
+                      <td className="pl-2 align-middle">
+                        <button onClick={() => tableDelRow(ri)} className="text-[10px] text-gray-400 hover:text-red-500" title="Delete row">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-xs text-gray-400 mt-3">Cells accept simple HTML (&lt;strong&gt;, &lt;a href&gt;). The table is rebuilt from this grid — it cannot come out malformed.</p>
+            </div>
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button onClick={() => setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [] })} className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">Cancel</button>
+              <button onClick={saveTableEdit} className="px-4 py-2 rounded-lg bg-[#0ea5e9] text-white text-sm font-medium hover:bg-sky-600">Save table</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {embedEditor.show && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
+            <div className="px-5 py-3 border-b">
+              <h3 className="font-semibold text-gray-800">&lt;/&gt; Edit embed HTML</h3>
+              <p className="text-xs text-gray-500 mt-0.5">e.g. swap a YouTube URL. Validated before saving — invalid HTML is rejected.</p>
+            </div>
+            <div className="p-4">
+              <textarea
+                value={embedEditor.html}
+                onChange={e => setEmbedEditor(m => ({ ...m, html: e.target.value, error: '' }))}
+                rows={10}
+                spellCheck={false}
+                className="w-full border rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-sky-300"
+              />
+              {embedEditor.error && <p className="text-xs text-red-600 mt-2">{embedEditor.error}</p>}
+            </div>
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button onClick={() => setEmbedEditor({ show: false, wid: null, html: '', error: '' })} className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">Cancel</button>
+              <button onClick={saveEmbedEdit} className="px-4 py-2 rounded-lg bg-[#0ea5e9] text-white text-sm font-medium hover:bg-sky-600">Save embed</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={() => setShowLinkModal(false)}>
