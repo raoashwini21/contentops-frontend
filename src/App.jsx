@@ -1474,7 +1474,8 @@ export default function ContentOps() {
         tldrAdded: needsTldr && data.tldrAdded,
         changelog: data.changelog || [],
         verified: data.verified || [],
-        widgetWarnings: data.widgetWarnings || []
+        widgetWarnings: data.widgetWarnings || [],
+        skipped: data.skipped || []
       });
 
       setEditedContent(updated);
@@ -1709,6 +1710,19 @@ export default function ContentOps() {
                 {result.widgetWarnings.map((w, i) => (
                   <p key={i} className="text-xs text-red-700">{w}</p>
                 ))}
+              </div>
+            )}
+            {result.skipped?.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                <p className="text-sm font-semibold text-amber-800 mb-1">⏭ Skipped — apply manually if needed ({result.skipped.length})</p>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {result.skipped.map((sk, i) => (
+                    <div key={i} className="text-xs text-amber-800 bg-white rounded border border-amber-100 p-2">
+                      <span className="font-medium">{sk.where}:</span> {sk.reason}
+                      <span className="text-amber-600"> — {sk.why}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {result.changelog?.length > 0 && (
