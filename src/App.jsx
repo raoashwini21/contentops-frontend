@@ -573,6 +573,13 @@ function parseTableHTML(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const table = doc.querySelector('table');
   if (!table) return null;
+  // Preserve whatever WRAPS the table (w-embed div, figure). Webflow rich text
+  // does not support bare <table> — publishing one gets its tags stripped and
+  // the content flattens into run-together text. The wrapper must survive edits.
+  const startIdx = html.search(/<table[\s>]/i);
+  const endIdx = html.toLowerCase().lastIndexOf('</table>');
+  const prefix = startIdx > 0 ? html.slice(0, startIdx) : '';
+  const suffix = endIdx !== -1 ? html.slice(endIdx + '</table>'.length) : '';
   const rows = Array.from(table.querySelectorAll('tr')).map(tr => ({
     cells: Array.from(tr.children).filter(c => /^(TD|TH)$/.test(c.tagName)).map(c => ({
       tag: c.tagName.toLowerCase(),
@@ -581,15 +588,19 @@ function parseTableHTML(html) {
     })),
   })).filter(r => r.cells.length);
   if (!rows.length) return null;
-  return { attrs: getAttrString(table), rows, hasThead: !!table.querySelector('thead') };
+  return { attrs: getAttrString(table), rows, hasThead: !!table.querySelector('thead'), prefix, suffix };
 }
-function buildTableHTML({ attrs, rows, hasThead }) {
+function buildTableHTML({ attrs, rows, hasThead, prefix = '', suffix = '' }) {
   const rowHTML = r => `<tr>${r.cells.map(c => `<${c.tag}${c.attrs}>${c.html}</${c.tag}>`).join('')}</tr>`;
+  let t;
   if (hasThead && rows.length > 1) {
-    return `<table${attrs}><thead>${rowHTML(rows[0])}</thead><tbody>${rows.slice(1).map(rowHTML).join('')}</tbody></table>`;
+    t = `<table${attrs}><thead>${rowHTML(rows[0])}</thead><tbody>${rows.slice(1).map(rowHTML).join('')}</tbody></table>`;
+  } else if (hasThead && rows.length === 1) {
+    t = `<table${attrs}><thead>${rowHTML(rows[0])}</thead></table>`;
+  } else {
+    t = `<table${attrs}><tbody>${rows.map(rowHTML).join('')}</tbody></table>`;
   }
-  if (hasThead && rows.length === 1) return `<table${attrs}><thead>${rowHTML(rows[0])}</thead></table>`;
-  return `<table${attrs}><tbody>${rows.map(rowHTML).join('')}</tbody></table>`;
+  return prefix + t + suffix;
 }
 
 // ── Editor CSS ──────────────────────────────────
@@ -664,7 +675,7 @@ export default function ContentOps() {
   const [linkText, setLinkText] = useState('');
   const [editingLink, setEditingLink] = useState(null);
   const [imageAltModal, setImageAltModal] = useState({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
-  const [tableEditor, setTableEditor] = useState({ show: false, wid: null, attrs: '', hasThead: false, rows: [] });
+  const [tableEditor, setTableEditor] = useState({ show: false, wid: null, attrs: '', hasThead: false, rows: [], prefix: '', suffix: '' });
   const [embedEditor, setEmbedEditor] = useState({ show: false, wid: null, html: '', error: '' });
   const [editMode, setEditMode] = useState('edit');
   const [showHighlights, setShowHighlights] = useState(true);
@@ -1022,7 +1033,7 @@ export default function ContentOps() {
     if (!html) return;
     const parsed = parseTableHTML(html);
     if (parsed) {
-      setTableEditor({ show: true, wid, attrs: parsed.attrs, hasThead: parsed.hasThead, rows: parsed.rows });
+      setTableEditor({ show: true, wid, attrs: parsed.attrs, hasThead: parsed.hasThead, rows: parsed.rows, prefix: parsed.prefix, suffix: parsed.suffix });
     } else {
       setEmbedEditor({ show: true, wid, html, error: '' });
     }
@@ -1036,13 +1047,13 @@ export default function ContentOps() {
   };
 
   const saveTableEdit = () => {
-    const { wid, attrs, hasThead, rows } = tableEditor;
+    const { wid, attrs, hasThead, rows, prefix, suffix } = tableEditor;
     const clean = rows
       .map(r => ({ cells: r.cells.map(c => ({ ...c, html: balanceInlineInBlock(c.html) })) }))
       .filter(r => r.cells.length);
     if (!clean.length) { setStatus({ type: 'error', message: 'Table needs at least one row' }); return; }
-    widgetStoreRef.current.set(wid, buildTableHTML({ attrs, hasThead, rows: clean }));
-    setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [] });
+    widgetStoreRef.current.set(wid, buildTableHTML({ attrs, hasThead, rows: clean, prefix, suffix }));
+    setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [], prefix: '', suffix: '' });
     refreshShell(wid);
   };
 
@@ -1950,7 +1961,7 @@ export default function ContentOps() {
               <p className="text-xs text-gray-400 mt-3">Cells accept simple HTML (&lt;strong&gt;, &lt;a href&gt;). The table is rebuilt from this grid — it cannot come out malformed.</p>
             </div>
             <div className="px-5 py-3 border-t flex justify-end gap-2">
-              <button onClick={() => setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [] })} className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [], prefix: '', suffix: '' })} className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">Cancel</button>
               <button onClick={saveTableEdit} className="px-4 py-2 rounded-lg bg-[#0ea5e9] text-white text-sm font-medium hover:bg-sky-600">Save table</button>
             </div>
           </div>
