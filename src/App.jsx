@@ -504,6 +504,7 @@ function isWidgetElement(el) {
   if (WIDGET_TAGS.includes(el.tagName)) return true;
   if (el.querySelector && el.querySelector('iframe,video,embed,object,script,table,form')) return true;
   if (el.tagName === 'DIV' && !el.classList.contains('tldr-box')) return true;
+  if (el.tagName === 'FIGURE') return true; // images incl. — Webflow figure structure must stay byte-exact
   const cls = typeof el.className === 'string' ? el.className : '';
   if (/widget|w-embed|w-widget/i.test(cls)) return true;
   return false;
@@ -513,6 +514,7 @@ function widgetLabel(el) {
   if (el.tagName === 'TABLE' || el.querySelector?.('table')) return 'table';
   if (el.tagName === 'IFRAME' || el.querySelector?.('iframe')) return 'video / embed';
   if (el.tagName === 'VIDEO' || el.querySelector?.('video')) return 'video';
+  if (el.querySelector?.('img')) return 'image';
   return 'embed';
 }
 
@@ -542,20 +544,38 @@ function blockCleanHTML(el) {
   if (!clone.className) clone.removeAttribute('class');
   // browser-inserted junk inside blocks: divs/spans from execCommand
   clone.querySelectorAll('div').forEach(d => {
+    if (d.closest('figure')) return; // Webflow figure>div>img structure must stay intact
     const p = document.createElement('p');
     p.innerHTML = d.innerHTML;
     d.replaceWith(...(d.closest('li') ? d.childNodes : [p]));
   });
-  clone.querySelectorAll('span').forEach(s => {
-    if (!s.className && !s.id && !s.getAttribute('style')) s.replaceWith(...s.childNodes);
+  clone.querySelectorAll('span').forEach(sp => {
+    if (sp.className || sp.id) return;
+    const st = sp.getAttribute('style') || '';
+    // Google-Docs paste wraps text in styled spans. Convert real formatting
+    // to semantic tags, discard the noise — Webflow rejects styled spans in lists.
+    const bold = /font-weight\s*:\s*(bold|[7-9]00)/i.test(st);
+    const italic = /font-style\s*:\s*italic/i.test(st);
+    let repl;
+    if (bold && italic) { repl = document.createElement('strong'); const em = document.createElement('em'); em.innerHTML = sp.innerHTML; repl.appendChild(em); }
+    else if (bold) { repl = document.createElement('strong'); repl.innerHTML = sp.innerHTML; }
+    else if (italic) { repl = document.createElement('em'); repl.innerHTML = sp.innerHTML; }
+    if (repl) sp.replaceWith(repl);
+    else sp.replaceWith(...sp.childNodes);
   });
   // list hygiene: only <li> children, role attrs (Webflow requirement)
   if (clone.tagName === 'UL' || clone.tagName === 'OL') {
+    // Webflow-canonical: ul/ol/li carry ONLY the role attribute. Foreign attrs
+    // (style/class/dir from Google-Docs paste) make Webflow silently drop lists.
+    Array.from(clone.attributes).forEach(a => clone.removeAttribute(a.name));
     clone.setAttribute('role', 'list');
     Array.from(clone.children).forEach(c => {
       if (c.tagName !== 'LI') { const li = document.createElement('li'); li.innerHTML = c.outerHTML; c.replaceWith(li); }
     });
-    clone.querySelectorAll('li').forEach(li => li.setAttribute('role', 'listitem'));
+    clone.querySelectorAll('li').forEach(li => {
+      Array.from(li.attributes).forEach(a => li.removeAttribute(a.name));
+      li.setAttribute('role', 'listitem');
+    });
     if (!clone.querySelector('li')) return '';
   }
   // drop empty blocks
@@ -1546,6 +1566,30 @@ export default function ContentOps() {
     return root.innerHTML;
   };
 
+  // Publish-safe serialization: widgets pass through VERBATIM; only text
+  // content goes through list sanitizing + anchor fixing. The old path ran a
+  // full DOMParser round-trip over widgets too — undoing byte fidelity.
+  const splitForPublish = (html, blogLiveUrl) => {
+    const doc = new DOMParser().parseFromString(`<div id="__pub">${html}</div>`, 'text/html');
+    const root = doc.getElementById('__pub');
+    const parts = [];
+    let textBuf = [];
+    const flushText = () => {
+      if (!textBuf.length) return;
+      const chunk = textBuf.join('\n');
+      parts.push(fixAnchorLinksForWebflow(sanitizeListHTML(chunk), blogLiveUrl));
+      textBuf = [];
+    };
+    Array.from(root.childNodes).forEach(node => {
+      if (node.nodeType === 3) { if (node.textContent.trim()) textBuf.push(node.textContent); return; }
+      if (node.nodeType !== 1) return;
+      if (isWidgetElement(node)) { flushText(); parts.push(node.outerHTML); }
+      else textBuf.push(node.outerHTML);
+    });
+    flushText();
+    return parts.join('\n');
+  };
+
   const publishToWebflow = async () => {
     if (!result || !selectedBlog) return;
     if (!blogTitle.trim()) { setStatus({ type: 'error', message: 'Title empty' }); return; }
@@ -1556,9 +1600,8 @@ export default function ContentOps() {
     setLoading(true);
     setStatus({ type: 'info', message: 'Publishing...' });
 
-    const sanitized = sanitizeListHTML(latestContent);
     const blogLiveUrl = getBlogLiveUrl(selectedBlog, result?.originalContent);
-    const fixedHtml = fixAnchorLinksForWebflow(sanitized, blogLiveUrl);
+    const fixedHtml = splitForPublish(latestContent, blogLiveUrl);
     const fieldData = { name: blogTitle.trim(), 'post-body': fixedHtml };
     fieldData['meta-title'] = (metaTitle.trim() || blogTitle.trim());
     if (metaDescription.trim()) fieldData[metaFieldName] = metaDescription.trim();
@@ -1578,7 +1621,12 @@ export default function ContentOps() {
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || d.message || `HTTP ${r.status}`);
-        setStatus({ type: 'success', message: 'Published!' });
+        if (d.verify && d.verify.dropped && d.verify.dropped.length) {
+          setStatus({ type: 'error', message: `⚠ Published, but Webflow DROPPED content: ${d.verify.dropped.join('; ')}. Do NOT go live — flag Ashwini with this message.` });
+          setLoading(false);
+          return;
+        }
+        setStatus({ type: 'success', message: d.verify ? 'Published! ✓ verified — all lists, tables & embeds stored intact' : 'Published!' });
         setView('success');
         setLoading(false);
         return;
