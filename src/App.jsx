@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue, memo } from 'react';
-import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye, Copy, Bold, Italic, List, ListOrdered, Link2, ImagePlus, Type, Undo2, ChevronDown, Upload, X, ArrowLeft, ArrowRight, ShieldCheck, FileText, Info } from 'lucide-react';
+import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye, Copy, Bold, Italic, List, ListOrdered, Link2, ImagePlus, Type, Undo2, ChevronDown, Upload, X, ArrowLeft, ArrowRight, ShieldCheck, Info } from 'lucide-react';
 
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
@@ -368,7 +368,7 @@ const createHighlightedHTML = (original, updated) => {
         if ([...words].filter(w => !ow.has(w)).length < 4) { unused.used = true; found = true; break; }
       }
       if (!found) {
-        html += `<div style="background-color:#e0f2fe;padding:8px;margin:8px 0;border-left:3px solid #0ea5e9;border-radius:4px;">${block}</div>`;
+        html += `<div style="background-color:rgb(var(--brand-50));padding:8px 12px;margin:8px 0;border-left:4px solid rgb(var(--brand-500));border-radius:10px;">${block}</div>`;
         changes++;
         continue;
       }
@@ -625,7 +625,7 @@ function buildTableHTML({ attrs, rows, hasThead, prefix = '', suffix = '' }) {
 
 // ── Editor CSS ──────────────────────────────────
 const EDITOR_STYLES = `
-  .co-editor { font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.75; color: #1e293b; padding: 32px clamp(20px, 5vw, 56px); max-width: 820px; margin: 0 auto; min-height: 600px; outline: none; }
+  .co-editor { font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.75; color: #1d1a33; padding: 32px clamp(20px, 5vw, 56px); max-width: 820px; margin: 0 auto; min-height: 600px; outline: none; }
   .co-editor h1 { font-size: 2rem; font-weight: 800; margin: 2rem 0 1rem; line-height: 1.25; }
   .co-editor h2 { font-size: 1.6rem; font-weight: 700; margin: 1.75rem 0 0.75rem; line-height: 1.3; }
   .co-editor h3 { font-size: 1.3rem; font-weight: 700; margin: 1.5rem 0 0.5rem; line-height: 1.35; }
@@ -635,8 +635,8 @@ const EDITOR_STYLES = `
   .co-editor ul { list-style-type: disc; }
   .co-editor ol { list-style-type: decimal; }
   .co-editor li { margin: 0.35rem 0; display: list-item !important; }
-  .co-editor a { color: #0ea5e9; text-decoration: underline; }
-  .co-editor img { max-width: 100%; height: auto; display: block; margin: 1rem 0; border-radius: 6px; clear: both; position: relative; z-index: 1; }
+  .co-editor a { color: rgb(var(--brand-600)); text-decoration: underline; }
+  .co-editor img { max-width: 100%; height: auto; display: block; margin: 1rem 0; border-radius: 10px; clear: both; position: relative; z-index: 1; }
   .co-editor iframe { max-width: 100%; display: block; margin: 1rem 0; clear: both; position: relative; z-index: 1; min-height: 60px; border: 1px dashed #cbd5e1; }
   .co-editor video { max-width: 100%; display: block; margin: 1rem 0; clear: both; }
   .co-editor figure { max-width: 100%; margin: 1rem 0; clear: both; display: block; overflow: visible; }
@@ -645,18 +645,18 @@ const EDITOR_STYLES = `
   .co-editor th { background: #f9fafb; font-weight: 600; }
   .co-editor strong, .co-editor b { font-weight: 700; }
   .co-editor em, .co-editor i { font-style: italic; }
-  .co-editor blockquote { border-left: 3px solid #0ea5e9; margin: 1rem 0; padding: 0.75rem 1rem; background: #f8fafc; }
+  .co-editor blockquote { border-left: 3px solid rgb(var(--brand-400)); margin: 1rem 0; padding: 0.75rem 1rem; background: #f8fafc; }
   .co-editor [class*="widget"]:not([class*="co-widget"]), .co-editor [class*="w-embed"], .co-editor [class*="w-widget"] { display: block; margin: 1rem 0; clear: both; padding: 12px; border: 1px dashed #94a3b8; background: #f8fafc; border-radius: 6px; }
   .co-editor * { max-width: 100%; box-sizing: border-box; }
-  .co-editor .tldr-box { background: #f0f9ff; border: 1px solid #bae6fd; border-left: 4px solid #0ea5e9; border-radius: 8px; padding: 16px 20px; margin: 1rem 0 1.5rem 0; }
-  .co-editor .tldr-box strong { color: #0369a1; }
+  .co-editor .tldr-box { background: rgb(var(--brand-50)); border: 1px solid rgb(var(--brand-200)); border-left: 4px solid rgb(var(--brand-500)); border-radius: 8px; padding: 16px 20px; margin: 1rem 0 1.5rem 0; }
+  .co-editor .tldr-box strong { color: rgb(var(--brand-700)); }
 
   /* ── Block editor ── */
   .co-editor .co-block { position: relative; border-left: 3px solid transparent; padding-left: 9px; margin-left: -12px; outline: none; border-radius: 2px; transition: background .12s, border-color .12s; }
-  .co-editor .co-block:focus { border-left-color: #bae6fd; background: #f8fbff; }
-  .co-editor .co-block.co-edited { border-left-color: #0ea5e9; background: #eff8ff; }
-  .co-editor .co-block.co-edited::after { content: 'edited'; position: absolute; right: 6px; top: 2px; font-size: 10px; font-weight: 600; color: #0284c7; background: #e0f2fe; padding: 1px 7px; border-radius: 99px; pointer-events: none; }
-  .co-widget-shell { margin: 1rem 0; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; padding: 12px; user-select: none; cursor: default; }
+  .co-editor .co-block:focus { border-left-color: rgb(var(--brand-200)); background: rgb(var(--brand-50) / .5); }
+  .co-editor .co-block.co-edited { border-left-color: rgb(var(--brand-500)); background: rgb(var(--brand-50)); }
+  .co-editor .co-block.co-edited::after { content: 'edited'; position: absolute; right: 6px; top: 2px; font-size: 10px; font-weight: 700; color: rgb(var(--brand-700)); background: rgb(var(--brand-100)); padding: 1px 7px; border-radius: 99px; pointer-events: none; }
+  .co-widget-shell { margin: 1rem 0; border: 1px solid #e2e8f0; border-radius: 14px; background: #fbfaff; padding: 12px; border-color: rgb(var(--brand-100)); user-select: none; cursor: default; }
   .co-widget-label { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #64748b; margin-bottom: 8px; display: flex; gap: 6px; align-items: center; text-transform: uppercase; }
   .co-widget-shell iframe { width: 100% !important; aspect-ratio: 16/9; height: auto !important; min-height: 320px; border: 0; }
   .co-widget-shell video { width: 100%; height: auto; }
@@ -664,32 +664,96 @@ const EDITOR_STYLES = `
   .co-widget-label { justify-content: space-between; }
   .co-widget-actions { display: inline-flex; gap: 6px; }
   .co-widget-actions button { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; text-transform: none; letter-spacing: 0; }
-  .co-widget-actions button:hover { border-color: #0ea5e9; color: #0ea5e9; }
-  .co-widget-shell.co-edited { border-color: #0ea5e9; background: #f0f9ff; }
-  .co-widget-shell.co-edited .co-widget-label::before { content: 'edited · '; color: #0284c7; }
+  .co-widget-actions button:hover { border-color: rgb(var(--brand-400)); color: rgb(var(--brand-600)); }
+  .co-widget-shell.co-edited { border-color: rgb(var(--brand-400)); background: rgb(var(--brand-50)); }
+  .co-widget-shell.co-edited .co-widget-label::before { content: 'edited · '; color: rgb(var(--brand-700)); }
 `;
 
 // ── UI primitives ───────────────────────────────
 const TYPE_STYLES = {
-  BOFU: 'bg-rose-50 text-rose-700 ring-rose-600/15',
-  MOFU: 'bg-amber-50 text-amber-700 ring-amber-600/15',
-  TOFU: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15',
+  BOFU: 'bg-accent-50 text-accent-700 ring-accent-500/20',
+  MOFU: 'bg-amber-50 text-amber-700 ring-amber-500/25',
+  TOFU: 'bg-emerald-50 text-emerald-700 ring-emerald-500/20',
 };
+const TYPE_EMOJI = { BOFU: '🎯', MOFU: '🧭', TOFU: '🌱' };
+const TYPE_BAR = {
+  BOFU: 'from-accent-400 via-rose-400 to-fuchsia-400',
+  MOFU: 'from-amber-300 via-orange-300 to-accent-300',
+  TOFU: 'from-emerald-300 via-teal-300 to-sky-300',
+};
+
+// SalesRobot-flavoured mascot — pure SVG, colors follow the brand tokens
+function Robot({ className = 'w-12 h-12', float = false }) {
+  return (
+    <svg viewBox="0 0 64 64" className={`${className} ${float ? 'co-float' : ''}`} aria-hidden>
+      <defs>
+        <linearGradient id="co-robot-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="rgb(var(--brand-400))" />
+          <stop offset="1" stopColor="rgb(var(--brand-600))" />
+        </linearGradient>
+      </defs>
+      <line x1="32" y1="6" x2="32" y2="14" stroke="rgb(var(--brand-500))" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="32" cy="6" r="4" fill="rgb(var(--accent-400))" />
+      <rect x="6" y="28" width="6" height="14" rx="3" fill="rgb(var(--brand-300))" />
+      <rect x="52" y="28" width="6" height="14" rx="3" fill="rgb(var(--brand-300))" />
+      <rect x="10" y="14" width="44" height="40" rx="14" fill="url(#co-robot-g)" />
+      <rect x="16" y="22" width="32" height="22" rx="9" fill="white" />
+      <ellipse className="co-eye" cx="25" cy="31" rx="3.2" ry="4" fill="rgb(var(--ink))" />
+      <ellipse className="co-eye" cx="39" cy="31" rx="3.2" ry="4" fill="rgb(var(--ink))" />
+      <path d="M26 38 q6 5 12 0" stroke="rgb(var(--accent-500))" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      <circle cx="19.5" cy="37" r="2" fill="rgb(var(--accent-300))" opacity=".7" />
+      <circle cx="44.5" cy="37" r="2" fill="rgb(var(--accent-300))" opacity=".7" />
+    </svg>
+  );
+}
+
+const CONFETTI_COLORS = ['rgb(var(--brand-500))', 'rgb(var(--accent-400))', '#facc15', '#34d399', '#e879f9', '#60a5fa'];
+function Confetti() {
+  const pieces = useMemo(() => Array.from({ length: 70 }, (_, i) => ({
+    left: Math.random() * 100, delay: Math.random() * 0.7, dx: (Math.random() - 0.5) * 240,
+    rot: Math.random() * 900 - 450, w: 6 + Math.random() * 6, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    round: Math.random() > 0.6,
+  })), []);
+  return (
+    <div className="co-confetti" aria-hidden>
+      {pieces.map((p, i) => (
+        <i key={i} style={{ left: `${p.left}%`, width: p.w, height: p.round ? p.w : p.w * 1.6, borderRadius: p.round ? 99 : 2,
+          background: p.color, animationDelay: `${p.delay}s`, '--dx': `${p.dx}px`, '--rot': `${p.rot}deg` }} />
+      ))}
+    </div>
+  );
+}
+
+const ANALYZE_STEPS = [
+  ['📖', 'Reading your blog…'],
+  ['🔎', 'Searching the web for fresh facts…'],
+  ['🧮', 'Double-checking prices & stats…'],
+  ['✍️', 'Rewriting the outdated bits…'],
+  ['🛡️', 'Keeping tables & embeds safe…'],
+  ['✨', 'Polishing the final draft…'],
+];
+function AnalyzeStep() {
+  const [i, setI] = useState(0);
+  useEffect(() => { const t = setInterval(() => setI(x => (x + 1) % ANALYZE_STEPS.length), 3500); return () => clearInterval(t); }, []);
+  const [emoji, text] = ANALYZE_STEPS[i];
+  return <span key={i} className="co-swap inline-flex items-center gap-1.5"><span>{emoji}</span>{text}</span>;
+}
 
 // Memoized so typing in search / other state changes don't re-render every card
 const BlogCard = memo(function BlogCard({ blog, gsc, type, busy, disabled, onCheck }) {
   const summary = blog.fieldData['post-summary'] || blog.fieldData.excerpt;
   return (
-    <article className="co-card card group flex flex-col p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-900/[0.06]">
+    <article className="co-card card group relative overflow-hidden flex flex-col p-4 pt-5 transition duration-300 ease-out hover:-translate-y-1 hover:border-brand-200 hover:shadow-xl hover:shadow-brand-500/10">
+      <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${TYPE_BAR[type]}`} />
       <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-        <span className={`chip ring-1 ring-inset ${TYPE_STYLES[type]}`}>{type}</span>
+        <span className={`chip ring-1 ring-inset ${TYPE_STYLES[type]}`}><span className="co-wiggle inline-block">{TYPE_EMOJI[type]}</span>{type}</span>
         {gsc && (
-          <span className="chip bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/15">
+          <span className="chip bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-500/15">
             <TrendingUp className="w-3 h-3" />{Math.round(gsc.clicks)} clicks · #{gsc.position.toFixed(1)}
           </span>
         )}
       </div>
-      <h3 className="font-semibold text-slate-900 text-[15px] leading-snug line-clamp-2 mb-1.5">{blog.fieldData.name}</h3>
+      <h3 className="font-bold text-ink text-[15px] leading-snug line-clamp-2 mb-1.5 group-hover:text-brand-700 transition-colors">{blog.fieldData.name}</h3>
       <p className="text-[13px] text-slate-500 leading-relaxed line-clamp-2 mb-3">{summary || 'No description'}</p>
       {gsc?.hasKeywords && (
         <p className="text-xs text-slate-400 truncate mb-3" title={gsc.keywords.map(k => k.query).join(', ')}>
@@ -734,7 +798,7 @@ function CharCount({ value, max }) {
 
 function Section({ title, count, tone = 'slate', defaultOpen = true, children }) {
   const tones = {
-    slate: 'text-slate-900', red: 'text-red-700', amber: 'text-amber-700', violet: 'text-violet-700', sky: 'text-sky-700',
+    slate: 'text-ink', red: 'text-red-700', amber: 'text-amber-700', violet: 'text-fuchsia-700', sky: 'text-brand-700',
   };
   return (
     <details open={defaultOpen} className="card overflow-hidden">
@@ -1765,26 +1829,26 @@ export default function ContentOps() {
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
   };
 
-  const navBtn = (active) => `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${active ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`;
+  const navBtn = (active) => `px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors ${active ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-100' : 'text-slate-500 hover:text-brand-700 hover:bg-brand-50/60'}`;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <style>{EDITOR_STYLES}</style>
+      <div className="co-bg" aria-hidden />
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-40 h-14 bg-white/80 backdrop-blur-md border-b border-slate-200/80">
+      <header className="sticky top-0 z-40 h-14 bg-white/70 backdrop-blur-xl border-b border-brand-100/80">
         <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-          <button className="flex items-center gap-2.5 rounded-lg -ml-1 px-1 py-1" onClick={() => setView('home')}>
-            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-sky-600 shadow-sm shadow-sky-500/30 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </span>
-            <span className="text-[15px] font-semibold tracking-tight text-slate-900">ContentOps</span>
+          <button className="group flex items-center gap-2 rounded-xl -ml-1 px-1 py-1" onClick={() => setView('home')}>
+            <Robot className="w-9 h-9 transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110" />
+            <span className="font-display text-[17px] font-extrabold tracking-tight text-ink">Content<span className="text-brand-600">Ops</span></span>
+            <span className="hidden sm:inline-flex chip bg-accent-50 text-accent-600 ring-1 ring-inset ring-accent-500/20">by SalesRobot</span>
           </button>
 
           {view === 'review' && selectedBlog && (
             <div className="hidden md:flex items-center gap-2 min-w-0 text-sm text-slate-400">
               <span>Reviewing</span>
-              <span className="truncate max-w-[340px] text-slate-700 font-medium">{blogTitle || selectedBlog.fieldData.name}</span>
+              <span className="truncate max-w-[340px] text-ink font-semibold">{blogTitle || selectedBlog.fieldData.name}</span>
             </div>
           )}
 
@@ -1800,11 +1864,11 @@ export default function ContentOps() {
       {/* ── Toast ── */}
       {status.message && (
         <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-[400px] z-[10000] co-rise" role="status" aria-live="polite" key={status.message}>
-          <div className={`flex items-start gap-3 rounded-xl border bg-white/95 backdrop-blur px-4 py-3 shadow-lg shadow-slate-900/10 ${
-            status.type === 'error' ? 'border-red-200' : status.type === 'success' ? 'border-emerald-200' : 'border-slate-200'}`}>
+          <div className={`flex items-start gap-3 rounded-2xl border border-l-4 bg-white/95 backdrop-blur px-4 py-3 shadow-xl shadow-brand-900/10 ${
+            status.type === 'error' ? 'border-red-200 border-l-red-500' : status.type === 'success' ? 'border-emerald-200 border-l-emerald-500' : 'border-brand-100 border-l-brand-500'}`}>
             {status.type === 'error' ? <AlertCircle className="w-[18px] h-[18px] text-red-500 shrink-0 mt-px" /> :
              status.type === 'success' ? <CheckCircle className="w-[18px] h-[18px] text-emerald-500 shrink-0 mt-px" /> :
-             <Loader className="w-[18px] h-[18px] text-sky-500 animate-spin shrink-0 mt-px" />}
+             <Loader className="w-[18px] h-[18px] text-brand-500 animate-spin shrink-0 mt-px" />}
             <p className={`text-sm leading-snug flex-1 ${status.type === 'error' ? 'text-red-800' : 'text-slate-700'}`}>{status.message}</p>
             <button onClick={() => setStatus({ type: '', message: '' })} className="text-slate-400 hover:text-slate-700 -mr-1 p-0.5 rounded" aria-label="Dismiss"><X className="w-4 h-4" /></button>
           </div>
@@ -1815,32 +1879,50 @@ export default function ContentOps() {
 
         {/* ── Home ── */}
         {view === 'home' && (
-          <div className="co-view relative max-w-3xl mx-auto pt-10 sm:pt-20 pb-10 text-center">
-            <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 h-72 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,0.14),transparent_65%)]" />
-            <span className="relative inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-700 shadow-sm mb-6">
-              <ShieldCheck className="w-3.5 h-3.5" /> Fact-checked updates, published safely to Webflow
-            </span>
-            <h1 className="relative text-4xl sm:text-6xl font-semibold tracking-tight text-slate-900 leading-[1.05]">
-              Keep every blog<br /><span className="bg-gradient-to-r from-sky-500 to-indigo-500 bg-clip-text text-transparent">accurate & current</span>
-            </h1>
-            <p className="relative mt-5 text-base sm:text-lg text-slate-500 max-w-xl mx-auto">
-              Live search verifies facts, Claude rewrites what's outdated, and GSC keywords sharpen every update.
-            </p>
-            <div className="relative mt-8 flex items-center justify-center gap-3">
-              <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="btn btn-dark px-5 py-2.5 text-[15px]">
-                {savedConfig ? 'Open dashboard' : 'Get started'}<ArrowRight className="w-4 h-4" />
-              </button>
-              {savedConfig && <button onClick={() => setView('setup')} className="btn btn-secondary px-5 py-2.5 text-[15px]">Settings</button>}
+          <div className="co-view relative max-w-5xl mx-auto pt-8 sm:pt-16 pb-10">
+            <div className="grid md:grid-cols-[1.25fr_1fr] gap-10 items-center">
+              <div className="text-center md:text-left">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200 shadow-sm mb-6">
+                  <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-75 animate-ping" /><span className="relative inline-flex h-2 w-2 rounded-full bg-accent-500" /></span>
+                  Your blog's new best friend
+                </span>
+                <h1 className="text-4xl sm:text-6xl font-extrabold text-ink leading-[1.02]">
+                  Keep every blog{' '}
+                  <span className="relative whitespace-nowrap">
+                    <span className="bg-gradient-to-r from-brand-500 via-fuchsia-500 to-accent-500 bg-clip-text text-transparent">fresh</span>
+                    <svg viewBox="0 0 200 20" className="absolute -bottom-2 left-0 w-full h-3 text-accent-400" preserveAspectRatio="none" aria-hidden><path d="M2 14 Q 50 2 100 10 T 198 6" stroke="currentColor" strokeWidth="5" fill="none" strokeLinecap="round" /></svg>
+                  </span>{' '}<span className="whitespace-nowrap">& accurate <span className="inline-block co-float">✨</span></span>
+                </h1>
+                <p className="mt-6 text-base sm:text-lg text-slate-600 max-w-xl mx-auto md:mx-0">
+                  Live search checks the facts, Claude rewrites what's gone stale, and your GSC keywords make every update rank harder.
+                </p>
+                <div className="mt-8 flex items-center justify-center md:justify-start gap-3 flex-wrap">
+                  <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="btn btn-primary px-6 py-3 text-[15px]">
+                    {savedConfig ? 'Open dashboard' : "Let's go"}<ArrowRight className="w-4 h-4" />
+                  </button>
+                  {savedConfig && <button onClick={() => setView('setup')} className="btn btn-secondary px-6 py-3 text-[15px]"><Settings className="w-4 h-4" />Settings</button>}
+                </div>
+              </div>
+              <div className="relative mx-auto w-56 h-56 sm:w-72 sm:h-72">
+                <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-brand-200 via-fuchsia-100 to-accent-100 rotate-6" />
+                <div className="absolute inset-0 rounded-[2.5rem] bg-white/70 ring-1 ring-brand-100 backdrop-blur -rotate-3 co-dots" />
+                <Robot className="absolute inset-0 m-auto w-36 h-36 sm:w-44 sm:h-44 drop-shadow-xl" float />
+                <span className="absolute -top-3 -left-3 chip bg-white text-emerald-700 ring-1 ring-emerald-200 shadow-md px-3 py-1 text-xs co-float" style={{ animationDelay: '-1s' }}>✅ Facts verified</span>
+                <span className="absolute top-6 -right-8 chip bg-white text-brand-700 ring-1 ring-brand-200 shadow-md px-3 py-1 text-xs co-float" style={{ animationDelay: '-2s' }}>📈 +GSC keywords</span>
+                <span className="absolute -bottom-3 left-4 chip bg-white text-accent-600 ring-1 ring-accent-200 shadow-md px-3 py-1 text-xs co-float" style={{ animationDelay: '-3s' }}>🚀 Published!</span>
+              </div>
             </div>
-            <div className="relative mt-16 grid sm:grid-cols-3 gap-3 text-left">
+            <div className="mt-20 grid sm:grid-cols-3 gap-4">
               {[
-                [Search, 'Live verification', 'Brave + Google search check every claim, price and stat.'],
-                [TrendingUp, 'GSC-aware', 'Upload Search Console data to weave in ranking keywords.'],
-                [ShieldCheck, 'Publish-safe', 'Tables, embeds and lists are locked and verified on publish.'],
-              ].map(([Icon, t, d]) => (
-                <div key={t} className="card p-4">
-                  <Icon className="w-5 h-5 text-sky-500 mb-2.5" />
-                  <p className="text-sm font-semibold text-slate-900">{t}</p>
+                [Search, 'Live verification', 'Brave + Google search check every claim, price and stat.', 'from-brand-400 to-brand-600'],
+                [TrendingUp, 'GSC-aware', 'Upload Search Console data to weave in ranking keywords.', 'from-fuchsia-400 to-pink-500'],
+                [ShieldCheck, 'Publish-safe', 'Tables, embeds and lists are locked and verified on publish.', 'from-accent-400 to-amber-400'],
+              ].map(([Icon, t, d, g]) => (
+                <div key={t} className="card group p-5 transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-brand-500/10">
+                  <span className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${g} items-center justify-center shadow-md mb-3 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110`}>
+                    <Icon className="w-5 h-5 text-white" />
+                  </span>
+                  <p className="font-display text-base font-bold text-ink">{t}</p>
                   <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">{d}</p>
                 </div>
               ))}
@@ -1852,8 +1934,8 @@ export default function ContentOps() {
         {view === 'setup' && (
           <div className="co-view max-w-xl mx-auto">
             <div className="mb-6">
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Settings</h1>
-              <p className="text-sm text-slate-500 mt-1">Keys are stored only in this browser.</p>
+              <h1 className="text-3xl font-extrabold text-ink">Settings ⚙️</h1>
+              <p className="text-sm text-slate-500 mt-1">🔒 Keys are stored only in this browser.</p>
             </div>
             <div className="card p-6 space-y-4">
               {[
@@ -1864,7 +1946,7 @@ export default function ContentOps() {
                 ['Site ID', 'siteId', 'Optional, for image uploads', false],
               ].map(([label, key, ph, req]) => (
                 <div key={key}>
-                  <label className="label" htmlFor={`cfg-${key}`}>{label}{req && <span className="text-sky-500 ml-0.5">*</span>}</label>
+                  <label className="label" htmlFor={`cfg-${key}`}>{label}{req && <span className="text-brand-500 ml-0.5">*</span>}</label>
                   <input
                     id={`cfg-${key}`}
                     type={['collectionId', 'siteId'].includes(key) ? 'text' : 'password'}
@@ -1893,36 +1975,41 @@ export default function ContentOps() {
           <div className="co-view">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Blog posts</h1>
+                <h1 className="text-3xl font-extrabold text-ink">Blog posts <span className="inline-block co-float">📚</span></h1>
                 <p className="text-sm text-slate-500 mt-1">
                   {blogs.length
-                    ? <>{blogs.length} posts{gscData && <> · <span className="text-violet-600">{gscData.blogsCount} with GSC data</span></>}</>
+                    ? <>{blogs.length} posts{gscData && <> · <span className="text-brand-600 font-semibold">{gscData.blogsCount} with GSC data</span></>}</>
                     : 'Load your Webflow collection to get started.'}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={() => setShowGscModal(true)} className="btn btn-secondary">
-                  <TrendingUp className="w-4 h-4 text-violet-500" />{gscData ? `GSC · ${gscData.blogsCount}` : 'Upload GSC'}
+                  <TrendingUp className="w-4 h-4 text-fuchsia-500" />{gscData ? `GSC · ${gscData.blogsCount}` : 'Upload GSC'}
                 </button>
                 <button onClick={testConnection} disabled={loading} className="btn btn-ghost"><Zap className="w-4 h-4" />Test</button>
                 <button onClick={fetchBlogsQuick} disabled={loading} className="btn btn-secondary">Quick load</button>
-                <button onClick={() => fetchBlogs(true)} disabled={loading} className="btn btn-dark">
+                <button onClick={() => fetchBlogs(true)} disabled={loading} className="btn btn-primary">
                   <RefreshCw className={`w-4 h-4 ${loading && !analyzingId ? 'animate-spin' : ''}`} />Load all
                 </button>
               </div>
             </div>
 
             {analyzingId && selectedBlog && (
-              <div className="card p-4 mb-5 co-slide">
-                <div className="flex items-center justify-between gap-4 mb-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-sky-600 mb-0.5">Smart Check running</p>
-                    <p className="text-sm font-semibold text-slate-900 truncate">{selectedBlog.fieldData.name}</p>
+              <div className="card relative overflow-hidden p-5 mb-6 co-rise">
+                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-brand-200 to-accent-100 blur-2xl opacity-70" />
+                <div className="relative flex items-center gap-4">
+                  <Robot className="w-14 h-14 shrink-0" float />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-wider text-brand-600">Smart Check running</p>
+                      <span className="chip bg-brand-50 text-brand-700 ring-1 ring-brand-100"><ElapsedTimer /></span>
+                    </div>
+                    <p className="font-display text-base font-bold text-ink truncate mt-0.5">{selectedBlog.fieldData.name}</p>
+                    <p className="text-sm text-slate-500 mt-1 h-5"><AnalyzeStep /></p>
                   </div>
-                  <span className="text-sm text-slate-500 shrink-0"><ElapsedTimer /></span>
                 </div>
-                <div className="co-progress" />
-                <p className="text-xs text-slate-400 mt-2.5">Searching sources, verifying claims and rewriting outdated sections. This usually takes 1–3 minutes.</p>
+                <div className="relative co-progress mt-4" />
+                <p className="relative text-xs text-slate-400 mt-2">Usually takes 1–3 minutes. Grab a coffee ☕</p>
               </div>
             )}
 
@@ -1934,7 +2021,7 @@ export default function ContentOps() {
                   {query && <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
                 </div>
                 <div className="seg overflow-x-auto max-w-full">
-                  {[['all', 'All'], ['gsc', 'GSC'], ['BOFU', 'BOFU'], ['MOFU', 'MOFU'], ['TOFU', 'TOFU']]
+                  {[['all', '✨ All'], ['gsc', '📈 GSC'], ['BOFU', '🎯 BOFU'], ['MOFU', '🧭 MOFU'], ['TOFU', '🌱 TOFU']]
                     .filter(([k]) => k !== 'gsc' || gscData)
                     .map(([k, label]) => (
                       <button key={k} onClick={() => setFilter(k)} className={`seg-btn px-2.5 py-1 text-[13px] ${filter === k ? 'seg-btn-active' : ''}`}>
@@ -1958,16 +2045,17 @@ export default function ContentOps() {
                 ))}
               </div>
             ) : !blogs.length ? (
-              <div className="card border-dashed py-16 px-6 text-center">
-                <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-sky-50 flex items-center justify-center"><FileText className="w-6 h-6 text-sky-500" /></div>
-                <p className="font-semibold text-slate-900">No posts loaded yet</p>
-                <p className="text-sm text-slate-500 mt-1 mb-5">Quick load pulls cached posts in seconds.</p>
+              <div className="card border-2 border-dashed border-brand-200 bg-white/70 py-16 px-6 text-center">
+                <Robot className="w-20 h-20 mx-auto mb-4" float />
+                <p className="font-display text-xl font-bold text-ink">Nothing here yet 👋</p>
+                <p className="text-sm text-slate-500 mt-1 mb-6">Quick load pulls your Webflow posts in seconds.</p>
                 <button onClick={fetchBlogsQuick} className="btn btn-primary">Quick load</button>
               </div>
             ) : visibleRows.length === 0 ? (
               <div className="text-center py-16 text-sm text-slate-500">
+                <div className="text-4xl mb-3">🔍</div>
                 No posts match “{query}”.{' '}
-                <button onClick={() => { setQuery(''); setFilter('all'); }} className="text-sky-600 font-medium hover:underline">Clear filters</button>
+                <button onClick={() => { setQuery(''); setFilter('all'); }} className="text-brand-600 font-medium hover:underline">Clear filters</button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2004,7 +2092,7 @@ export default function ContentOps() {
                   </div>
                   {editMode === 'preview' && (
                     <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-                      <input type="checkbox" checked={showHighlights} onChange={e => setShowHighlights(e.target.checked)} className="rounded border-slate-300 text-sky-500 focus:ring-sky-500/30" />
+                      <input type="checkbox" checked={showHighlights} onChange={e => setShowHighlights(e.target.checked)} className="rounded border-slate-300 text-brand-500 focus:ring-brand-500/30" />
                       Highlight changes
                     </label>
                   )}
@@ -2027,11 +2115,11 @@ export default function ContentOps() {
                           <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-xl shadow-slate-900/10 z-50 p-1 min-w-[150px] co-pop">
                             {[2, 3, 4].map(l => (
                               <button key={l} onClick={() => formatHeading(l)} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-sm">
-                                <span className="font-semibold text-slate-900 w-6">H{l}</span><span className="text-slate-500">Heading {l}</span>
+                                <span className="font-bold text-ink w-6">H{l}</span><span className="text-slate-500">Heading {l}</span>
                               </button>
                             ))}
                             <button onClick={() => { execCmd('formatBlock', 'p'); setShowHeadingMenu(false); }} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-sm">
-                              <span className="font-semibold text-slate-900 w-6">¶</span><span className="text-slate-500">Paragraph</span>
+                              <span className="font-bold text-ink w-6">¶</span><span className="text-slate-500">Paragraph</span>
                             </button>
                           </div>
                         )}
@@ -2062,7 +2150,7 @@ export default function ContentOps() {
                     />
                     <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/60 rounded-b-xl text-xs text-slate-500 flex items-center gap-x-5 gap-y-1 flex-wrap">
                       <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-slate-400" />Tables, videos & embeds are protected. Use their Edit buttons to change them.</span>
-                      <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500" />Blue edge = your edit</span>
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-brand-500" />Blue edge = your edit</span>
                     </div>
                   </div>
                 )}
@@ -2079,7 +2167,7 @@ export default function ContentOps() {
                     <textarea
                       value={htmlSource}
                       onChange={e => setHtmlSource(e.target.value)}
-                      className="block w-full font-mono text-xs bg-slate-950 text-slate-200 caret-sky-400 p-5 focus:outline-none"
+                      className="block w-full font-mono text-xs bg-slate-950 text-slate-200 caret-brand-400 p-5 focus:outline-none"
                       style={{ minHeight: 560, resize: 'vertical', lineHeight: 1.6, tabSize: 2 }}
                       spellCheck={false}
                     />
@@ -2096,7 +2184,7 @@ export default function ContentOps() {
                 <div className="card p-4">
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     <span className={`chip ring-1 ring-inset ${TYPE_STYLES[result.blogType]}`}>{result.blogType}</span>
-                    {highlightedData && <span className="chip bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/15">{highlightedData.changesCount} changes</span>}
+                    {highlightedData && <span className="chip bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-600/15">{highlightedData.changesCount} changes</span>}
                     <span className="chip bg-slate-100 text-slate-600">{result.searchesUsed} searches</span>
                     <span className="chip bg-slate-100 text-slate-600">{result.duration}s</span>
                     {result.widgetsProtected > 0 && <span className="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/15">{result.widgetsProtected} widgets locked</span>}
@@ -2114,7 +2202,7 @@ export default function ContentOps() {
 
                 {result.widgetWarnings?.length > 0 && (
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5 mb-1.5"><AlertCircle className="w-4 h-4" />Check widgets before publishing</p>
+                    <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5 mb-1.5"><AlertCircle className="w-4 h-4" />⚠️ Check widgets before publishing</p>
                     {result.widgetWarnings.map((w, i) => <p key={i} className="text-xs text-red-700 leading-relaxed">{w}</p>)}
                   </div>
                 )}
@@ -2137,7 +2225,7 @@ export default function ContentOps() {
                 </div>
 
                 {result.changelog?.length > 0 && (
-                  <Section title="What changed" count={result.changelog.length}>
+                  <Section title="📝 What changed" count={result.changelog.length}>
                     <div className="space-y-2">
                       {result.changelog.map((c, i) => (
                         <div key={i} className="text-xs rounded-lg border border-slate-100 bg-slate-50/60 p-2.5">
@@ -2145,7 +2233,7 @@ export default function ContentOps() {
                             <span className={`chip text-[10px] uppercase tracking-wide ${
                               c.type === 'fix' ? 'bg-amber-100 text-amber-800' :
                               c.type === 'add' ? 'bg-emerald-100 text-emerald-800' :
-                              'bg-sky-100 text-sky-800'
+                              'bg-brand-100 text-brand-800'
                             }`}>{c.type || 'update'}</span>
                             <span className="font-medium text-slate-700 truncate">{c.where}</span>
                           </div>
@@ -2163,12 +2251,12 @@ export default function ContentOps() {
 
                 {result.changelog?.length === 0 && result.searchesUsed > 0 && (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 shrink-0" />Audit found nothing outdated. This blog is current.
+                    <CheckCircle className="w-4 h-4 shrink-0" />Nothing outdated found. This blog is already fresh! 🌟
                   </div>
                 )}
 
                 {result.skipped?.length > 0 && (
-                  <Section title="Skipped, apply manually" count={result.skipped.length} tone="amber" defaultOpen={false}>
+                  <Section title="⏭️ Skipped, apply manually" count={result.skipped.length} tone="amber" defaultOpen={false}>
                     <div className="space-y-2">
                       {result.skipped.map((sk, i) => (
                         <div key={i} className="text-xs rounded-lg border border-amber-100 bg-amber-50/50 p-2.5 text-amber-900 leading-relaxed">
@@ -2181,7 +2269,7 @@ export default function ContentOps() {
                 )}
 
                 {result.gscKeywordsUsed?.length > 0 && (
-                  <Section title="GSC keywords used" count={result.gscKeywordsUsed.length} tone="violet" defaultOpen={false}>
+                  <Section title="📈 GSC keywords used" count={result.gscKeywordsUsed.length} tone="violet" defaultOpen={false}>
                     <div className="flex flex-wrap gap-1.5">
                       {result.gscKeywordsUsed.slice(0, 10).map((kw, i) => (
                         <span key={i} className="chip bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/15 font-normal">{kw.query}</span>
@@ -2196,13 +2284,16 @@ export default function ContentOps() {
 
         {/* ── Success ── */}
         {view === 'success' && (
-          <div className="co-view max-w-md mx-auto text-center py-16">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 flex items-center justify-center mx-auto mb-5 co-pop">
-              <CheckCircle className="w-7 h-7 text-emerald-600" />
+          <div className="co-view max-w-md mx-auto text-center py-12">
+            <Confetti />
+            <div className="relative w-40 h-40 mx-auto mb-6 co-pop">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-brand-200 via-fuchsia-100 to-accent-100 animate-pulse" />
+              <Robot className="absolute inset-0 m-auto w-28 h-28" float />
+              <span className="absolute -top-1 -right-1 text-3xl co-float">🎉</span>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Published</h1>
-            <p className="text-slate-500 mt-1.5 mb-7 text-sm">{blogTitle ? <>“{blogTitle}” is updated on Webflow.</> : 'Content updated on Webflow.'}</p>
-            <button onClick={backToDashboard} className="btn btn-dark px-5 py-2.5">Check another post<ArrowRight className="w-4 h-4" /></button>
+            <h1 className="text-4xl font-extrabold text-ink">Shipped! 🚀</h1>
+            <p className="text-slate-500 mt-2 mb-8">{blogTitle ? <>“<span className="font-semibold text-ink">{blogTitle}</span>” is fresh on Webflow.</> : 'Content updated on Webflow.'}</p>
+            <button onClick={backToDashboard} className="btn btn-primary px-6 py-3 text-[15px]">Check another post<ArrowRight className="w-4 h-4" /></button>
           </div>
         )}
       </main>
@@ -2211,7 +2302,7 @@ export default function ContentOps() {
       {tableEditor.show && (
         <Modal size="max-w-4xl" className="max-h-[85vh] flex flex-col">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-            <h3 className="font-semibold text-slate-900">Edit table</h3>
+            <h3 className="font-bold text-ink">Edit table</h3>
             <div className="flex gap-2">
               <button onClick={tableAddRow} className="btn btn-secondary py-1.5 text-xs">+ Row</button>
               <button onClick={tableAddCol} className="btn btn-secondary py-1.5 text-xs">+ Column</button>
@@ -2236,7 +2327,7 @@ export default function ContentOps() {
                           value={cell.html}
                           onChange={e => tableCell(ri, ci, e.target.value)}
                           rows={2}
-                          className={`block w-full min-w-[120px] p-2 text-sm resize-y focus:outline-none focus:bg-sky-50/40 focus:ring-2 focus:ring-inset focus:ring-sky-300 ${cell.tag === 'th' ? 'font-semibold bg-slate-50' : ''}`}
+                          className={`block w-full min-w-[120px] p-2 text-sm resize-y focus:outline-none focus:bg-brand-50/40 focus:ring-2 focus:ring-inset focus:ring-brand-300 ${cell.tag === 'th' ? 'font-semibold bg-slate-50' : ''}`}
                         />
                       </td>
                     ))}
@@ -2260,7 +2351,7 @@ export default function ContentOps() {
       {embedEditor.show && (
         <Modal size="max-w-2xl">
           <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-900">Edit embed HTML</h3>
+            <h3 className="font-bold text-ink">Edit embed HTML</h3>
             <p className="text-xs text-slate-500 mt-0.5">e.g. swap a YouTube URL. Invalid HTML is rejected before saving.</p>
           </div>
           <div className="p-5">
@@ -2269,7 +2360,7 @@ export default function ContentOps() {
               onChange={e => setEmbedEditor(m => ({ ...m, html: e.target.value, error: '' }))}
               rows={10}
               spellCheck={false}
-              className="block w-full rounded-lg p-3 text-xs font-mono bg-slate-950 text-slate-200 caret-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              className="block w-full rounded-lg p-3 text-xs font-mono bg-slate-950 text-slate-200 caret-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
             />
             {embedEditor.error && <p className="text-xs text-red-600 mt-2">{embedEditor.error}</p>}
           </div>
@@ -2284,7 +2375,7 @@ export default function ContentOps() {
       {showLinkModal && (
         <Modal z="z-[9999]" size="max-w-sm" onClose={() => setShowLinkModal(false)}>
           <form className="p-5 space-y-4" onSubmit={e => { e.preventDefault(); applyLink(); }}>
-            <h3 className="font-semibold text-slate-900">{editingLink ? 'Edit link' : 'Insert link'}</h3>
+            <h3 className="font-bold text-ink">{editingLink ? 'Edit link' : 'Insert link'}</h3>
             <div>
               <label className="label" htmlFor="co-link-url">URL</label>
               <input id="co-link-url" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://..." className="input" autoFocus />
@@ -2305,7 +2396,7 @@ export default function ContentOps() {
       {imageAltModal.show && (
         <Modal z="z-[9999]" onClose={closeImageModal}>
           <div className="p-5 space-y-4">
-            <h3 className="font-semibold text-slate-900">{imageAltModal.isUpload ? 'Add alt text' : 'Edit image'}</h3>
+            <h3 className="font-bold text-ink">{imageAltModal.isUpload ? 'Add alt text' : 'Edit image'}</h3>
             <img src={imageAltModal.src} alt="" className="w-full max-h-52 object-contain rounded-lg bg-slate-100 ring-1 ring-slate-200" />
             <div>
               <label className="label" htmlFor="co-alt">Alt text {imageAltModal.isUpload && <span className="text-red-500">*</span>}</label>
@@ -2332,7 +2423,7 @@ export default function ContentOps() {
         <Modal z="z-[9999]" onClose={() => setShowGscModal(false)}>
           <div className="p-5 space-y-4">
             <div>
-              <h3 className="font-semibold text-slate-900">Search Console data</h3>
+              <h3 className="font-bold text-ink">Search Console data</h3>
               <p className="text-sm text-slate-500 mt-1">Upload the XLSX export from Google Search Console (needs Queries + Pages sheets).</p>
             </div>
             {gscData && (
@@ -2340,8 +2431,8 @@ export default function ContentOps() {
                 <CheckCircle className="w-4 h-4 shrink-0" />{gscData.totalMatches} blogs matched with keywords
               </div>
             )}
-            <label className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${gscUploading ? 'border-sky-300 bg-sky-50/50' : 'border-slate-200 hover:border-sky-300 hover:bg-slate-50 cursor-pointer'}`}>
-              {gscUploading ? <Loader className="w-6 h-6 text-sky-500 animate-spin" /> : <Upload className="w-6 h-6 text-slate-400" />}
+            <label className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${gscUploading ? 'border-brand-300 bg-brand-50/50' : 'border-slate-200 hover:border-brand-300 hover:bg-slate-50 cursor-pointer'}`}>
+              {gscUploading ? <Loader className="w-6 h-6 text-brand-500 animate-spin" /> : <Upload className="w-6 h-6 text-slate-400" />}
               <span className="text-sm font-medium text-slate-700">{gscUploading ? 'Processing…' : gscData ? 'Replace file' : 'Choose .xlsx file'}</span>
               <span className="text-xs text-slate-400">Performance → Export → Excel</span>
               <input type="file" accept=".xlsx,.xls" onChange={handleGscUpload} disabled={gscUploading} className="sr-only" />
@@ -2351,9 +2442,9 @@ export default function ContentOps() {
         </Modal>
       )}
 
-      <footer className="border-t border-slate-200/80 bg-white mt-auto">
+      <footer className="border-t border-brand-100 bg-white/70 backdrop-blur mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between flex-wrap gap-3 text-xs text-slate-400">
-          <span><span className="font-semibold text-slate-600">ContentOps</span> by SalesRobot</span>
+          <span className="flex items-center gap-1.5"><Robot className="w-5 h-5" /><span className="font-semibold text-slate-600">ContentOps</span> by <span className="font-semibold text-accent-500">SalesRobot</span> 💜</span>
           <span>Brave + Google Search · Claude · Webflow CMS</span>
         </div>
       </footer>
