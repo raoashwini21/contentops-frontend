@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye, Copy, Bold, Italic, List, ListOrdered, Link2, ImagePlus, Type, Undo2, ChevronDown, Upload } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue, memo } from 'react';
+import { Zap, Settings, RefreshCw, CheckCircle, AlertCircle, Loader, TrendingUp, Search, Sparkles, Code, Eye, Copy, Bold, Italic, List, ListOrdered, Link2, ImagePlus, Type, Undo2, ChevronDown, Upload, X, ArrowLeft, ArrowRight, ShieldCheck, FileText, Info } from 'lucide-react';
 
 const BACKEND_URL = 'https://contentops-backend-production.up.railway.app';
 
@@ -625,7 +625,7 @@ function buildTableHTML({ attrs, rows, hasThead, prefix = '', suffix = '' }) {
 
 // ── Editor CSS ──────────────────────────────────
 const EDITOR_STYLES = `
-  .co-editor { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.7; color: #1a1a1a; padding: 32px; min-height: 600px; outline: none; }
+  .co-editor { font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.75; color: #1e293b; padding: 32px clamp(20px, 5vw, 56px); max-width: 820px; margin: 0 auto; min-height: 600px; outline: none; }
   .co-editor h1 { font-size: 2rem; font-weight: 800; margin: 2rem 0 1rem; line-height: 1.25; }
   .co-editor h2 { font-size: 1.6rem; font-weight: 700; margin: 1.75rem 0 0.75rem; line-height: 1.3; }
   .co-editor h3 { font-size: 1.3rem; font-weight: 700; margin: 1.5rem 0 0.5rem; line-height: 1.35; }
@@ -646,7 +646,7 @@ const EDITOR_STYLES = `
   .co-editor strong, .co-editor b { font-weight: 700; }
   .co-editor em, .co-editor i { font-style: italic; }
   .co-editor blockquote { border-left: 3px solid #0ea5e9; margin: 1rem 0; padding: 0.75rem 1rem; background: #f8fafc; }
-  .co-editor [class*="widget"], .co-editor [class*="w-embed"], .co-editor [class*="w-widget"] { display: block; margin: 1rem 0; clear: both; padding: 12px; border: 1px dashed #94a3b8; background: #f8fafc; border-radius: 6px; }
+  .co-editor [class*="widget"]:not([class*="co-widget"]), .co-editor [class*="w-embed"], .co-editor [class*="w-widget"] { display: block; margin: 1rem 0; clear: both; padding: 12px; border: 1px dashed #94a3b8; background: #f8fafc; border-radius: 6px; }
   .co-editor * { max-width: 100%; box-sizing: border-box; }
   .co-editor .tldr-box { background: #f0f9ff; border: 1px solid #bae6fd; border-left: 4px solid #0ea5e9; border-radius: 8px; padding: 16px 20px; margin: 1rem 0 1.5rem 0; }
   .co-editor .tldr-box strong { color: #0369a1; }
@@ -656,7 +656,7 @@ const EDITOR_STYLES = `
   .co-editor .co-block:focus { border-left-color: #bae6fd; background: #f8fbff; }
   .co-editor .co-block.co-edited { border-left-color: #0ea5e9; background: #eff8ff; }
   .co-editor .co-block.co-edited::after { content: 'edited'; position: absolute; right: 6px; top: 2px; font-size: 10px; font-weight: 600; color: #0284c7; background: #e0f2fe; padding: 1px 7px; border-radius: 99px; pointer-events: none; }
-  .co-widget-shell { margin: 1rem 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafbfc; padding: 10px; user-select: none; cursor: default; }
+  .co-widget-shell { margin: 1rem 0; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; padding: 12px; user-select: none; cursor: default; }
   .co-widget-label { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #64748b; margin-bottom: 8px; display: flex; gap: 6px; align-items: center; text-transform: uppercase; }
   .co-widget-shell iframe { width: 100% !important; aspect-ratio: 16/9; height: auto !important; min-height: 320px; border: 0; }
   .co-widget-shell video { width: 100%; height: auto; }
@@ -668,6 +668,86 @@ const EDITOR_STYLES = `
   .co-widget-shell.co-edited { border-color: #0ea5e9; background: #f0f9ff; }
   .co-widget-shell.co-edited .co-widget-label::before { content: 'edited · '; color: #0284c7; }
 `;
+
+// ── UI primitives ───────────────────────────────
+const TYPE_STYLES = {
+  BOFU: 'bg-rose-50 text-rose-700 ring-rose-600/15',
+  MOFU: 'bg-amber-50 text-amber-700 ring-amber-600/15',
+  TOFU: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15',
+};
+
+// Memoized so typing in search / other state changes don't re-render every card
+const BlogCard = memo(function BlogCard({ blog, gsc, type, busy, disabled, onCheck }) {
+  const summary = blog.fieldData['post-summary'] || blog.fieldData.excerpt;
+  return (
+    <article className="co-card card group flex flex-col p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-900/[0.06]">
+      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+        <span className={`chip ring-1 ring-inset ${TYPE_STYLES[type]}`}>{type}</span>
+        {gsc && (
+          <span className="chip bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/15">
+            <TrendingUp className="w-3 h-3" />{Math.round(gsc.clicks)} clicks · #{gsc.position.toFixed(1)}
+          </span>
+        )}
+      </div>
+      <h3 className="font-semibold text-slate-900 text-[15px] leading-snug line-clamp-2 mb-1.5">{blog.fieldData.name}</h3>
+      <p className="text-[13px] text-slate-500 leading-relaxed line-clamp-2 mb-3">{summary || 'No description'}</p>
+      {gsc?.hasKeywords && (
+        <p className="text-xs text-slate-400 truncate mb-3" title={gsc.keywords.map(k => k.query).join(', ')}>
+          {gsc.keywords.slice(0, 3).map(k => k.query).join(' · ')}
+        </p>
+      )}
+      <button onClick={() => onCheck(blog)} disabled={disabled} className={`btn w-full mt-auto ${busy ? 'btn-secondary' : 'btn-primary'}`}>
+        {busy ? <><Loader className="w-4 h-4 animate-spin" />Analyzing…</> : <><Sparkles className="w-4 h-4" />Smart Check</>}
+      </button>
+    </article>
+  );
+});
+
+function Modal({ onClose, children, size = 'max-w-md', className = '', z = 'z-50' }) {
+  useEffect(() => {
+    if (!onClose) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div
+      className={`fixed inset-0 ${z} flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px] co-fade`}
+      onMouseDown={onClose ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
+    >
+      <div className={`w-full ${size} bg-white rounded-2xl shadow-2xl ring-1 ring-slate-900/5 co-pop ${className}`}>{children}</div>
+    </div>
+  );
+}
+
+// Ticks on its own so the big editor tree doesn't re-render every second
+function ElapsedTimer() {
+  const [s, setS] = useState(0);
+  useEffect(() => { const t = setInterval(() => setS(x => x + 1), 1000); return () => clearInterval(t); }, []);
+  return <span className="tabular-nums">{Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</span>;
+}
+
+function CharCount({ value, max }) {
+  const n = value.length;
+  return <span className={`tabular-nums ${n > max ? 'text-amber-600' : 'text-slate-400'}`}>{n}/{max}</span>;
+}
+
+function Section({ title, count, tone = 'slate', defaultOpen = true, children }) {
+  const tones = {
+    slate: 'text-slate-900', red: 'text-red-700', amber: 'text-amber-700', violet: 'text-violet-700', sky: 'text-sky-700',
+  };
+  return (
+    <details open={defaultOpen} className="card overflow-hidden">
+      <summary className="flex items-center justify-between gap-2 px-4 py-3 hover:bg-slate-50/70 transition-colors">
+        <span className={`text-sm font-semibold ${tones[tone]}`}>
+          {title}{count != null && <span className="ml-1.5 text-xs font-medium text-slate-400">{count}</span>}
+        </span>
+        <ChevronDown className="co-chevron w-4 h-4 text-slate-400 transition-transform duration-200" />
+      </summary>
+      <div className="px-4 pb-4">{children}</div>
+    </details>
+  );
+}
 
 export default function ContentOps() {
   const [view, setView] = useState('home');
@@ -703,6 +783,10 @@ export default function ContentOps() {
   const [htmlSource, setHtmlSource] = useState('');
   const [copied, setCopied] = useState(false);
   const [detectedSiteId, setDetectedSiteId] = useState(null);
+  const [analyzingId, setAnalyzingId] = useState(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const deferredQuery = useDeferredValue(query);
 
   const editorRef = useRef(null);
   const savedRangeRef = useRef(null);
@@ -1439,6 +1523,7 @@ export default function ContentOps() {
 
   const analyzeBlog = async (blog) => {
     setSelectedBlog(blog);
+    setAnalyzingId(blog.id);
     setLoading(true);
     setHighlightedData(null);
     setResult(null);
@@ -1519,7 +1604,7 @@ export default function ContentOps() {
       setStatus({ type: 'success', message: successMsg });
       setView('review');
     } catch (e) { setStatus({ type: 'error', message: e.message }); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setAnalyzingId(null); }
   };
 
   const getBlogLiveUrl = (blog, originalContent) => {
@@ -1636,482 +1721,640 @@ export default function ContentOps() {
     }
   };
 
+  // ── Derived dashboard data (memoized) ──
+  const blogRows = useMemo(() => blogs.map(blog => ({
+    blog,
+    gsc: getGscKeywordsForBlog(blog),
+    type: detectBlogType(blog.fieldData.name || ''),
+  })), [blogs, gscData]);
+
+  const filterCounts = useMemo(() => {
+    const c = { all: blogRows.length, gsc: 0, BOFU: 0, MOFU: 0, TOFU: 0 };
+    blogRows.forEach(r => { c[r.type]++; if (r.gsc) c.gsc++; });
+    return c;
+  }, [blogRows]);
+
+  const visibleRows = useMemo(() => {
+    const q = deferredQuery.trim().toLowerCase();
+    return blogRows.filter(r => {
+      if (filter === 'gsc' ? !r.gsc : filter !== 'all' && r.type !== filter) return false;
+      if (!q) return true;
+      return (r.blog.fieldData.name || '').toLowerCase().includes(q) || (r.blog.fieldData.slug || '').includes(q);
+    });
+  }, [blogRows, deferredQuery, filter]);
+
+  // Stable callback so memoized cards don't re-render when this component does
+  const analyzeRef = useRef(analyzeBlog);
+  analyzeRef.current = analyzeBlog;
+  const onCheckBlog = useCallback((blog) => analyzeRef.current(blog), []);
+
+  // Success toasts dismiss themselves; errors stay until closed
+  useEffect(() => {
+    if (status.type !== 'success') return;
+    const t = setTimeout(() => setStatus(s => (s === status ? { type: '', message: '' } : s)), 4000);
+    return () => clearTimeout(t);
+  }, [status]);
+
+  const backToDashboard = () => { setView('dashboard'); setResult(null); setSelectedBlog(null); setHighlightedData(null); };
+
+  const closeImageModal = () => {
+    if (imageAltModal.isUpload) {
+      const m = editorRef.current?.querySelector('#image-insertion-marker'); if (m) m.remove();
+      if (imageAltModal.src) URL.revokeObjectURL(imageAltModal.src);
+    }
+    setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
+  };
+
+  const navBtn = (active) => `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${active ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <style>{EDITOR_STYLES}</style>
 
-      <nav className="bg-[#0f172a] border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('home')}>
-              <div className="w-10 h-10 bg-[#0ea5e9] rounded-lg flex items-center justify-center"><Sparkles className="w-6 h-6 text-white" /></div>
-              <span className="text-2xl font-bold text-white">ContentOps</span>
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-40 h-14 bg-white/80 backdrop-blur-md border-b border-slate-200/80">
+        <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          <button className="flex items-center gap-2.5 rounded-lg -ml-1 px-1 py-1" onClick={() => setView('home')}>
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-sky-600 shadow-sm shadow-sky-500/30 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
+            </span>
+            <span className="text-[15px] font-semibold tracking-tight text-slate-900">ContentOps</span>
+          </button>
+
+          {view === 'review' && selectedBlog && (
+            <div className="hidden md:flex items-center gap-2 min-w-0 text-sm text-slate-400">
+              <span>Reviewing</span>
+              <span className="truncate max-w-[340px] text-slate-700 font-medium">{blogTitle || selectedBlog.fieldData.name}</span>
             </div>
-            <div className="flex items-center gap-4">
-              {savedConfig && <>
-                <button onClick={() => setView('dashboard')} className="text-gray-300 hover:text-white font-medium">Dashboard</button>
-                <button onClick={() => setView('setup')} className="text-gray-300 hover:text-white"><Settings className="w-5 h-5" /></button>
-              </>}
-            </div>
+          )}
+
+          {savedConfig && (
+            <nav className="flex items-center gap-1">
+              <button onClick={() => setView('dashboard')} className={navBtn(view === 'dashboard' || view === 'review')}>Dashboard</button>
+              <button onClick={() => setView('setup')} className={navBtn(view === 'setup')} title="Settings" aria-label="Settings"><Settings className="w-4 h-4" /></button>
+            </nav>
+          )}
+        </div>
+      </header>
+
+      {/* ── Toast ── */}
+      {status.message && (
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-[400px] z-[10000] co-rise" role="status" aria-live="polite" key={status.message}>
+          <div className={`flex items-start gap-3 rounded-xl border bg-white/95 backdrop-blur px-4 py-3 shadow-lg shadow-slate-900/10 ${
+            status.type === 'error' ? 'border-red-200' : status.type === 'success' ? 'border-emerald-200' : 'border-slate-200'}`}>
+            {status.type === 'error' ? <AlertCircle className="w-[18px] h-[18px] text-red-500 shrink-0 mt-px" /> :
+             status.type === 'success' ? <CheckCircle className="w-[18px] h-[18px] text-emerald-500 shrink-0 mt-px" /> :
+             <Loader className="w-[18px] h-[18px] text-sky-500 animate-spin shrink-0 mt-px" />}
+            <p className={`text-sm leading-snug flex-1 ${status.type === 'error' ? 'text-red-800' : 'text-slate-700'}`}>{status.message}</p>
+            <button onClick={() => setStatus({ type: '', message: '' })} className="text-slate-400 hover:text-slate-700 -mr-1 p-0.5 rounded" aria-label="Dismiss"><X className="w-4 h-4" /></button>
           </div>
         </div>
-      </nav>
+      )}
 
-      <div className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        {status.message && (
-          <div className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${status.type === 'error' ? 'bg-red-50 border border-red-200' : status.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
-            {status.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" /> :
-             status.type === 'success' ? <CheckCircle className="w-5 h-5 text-green-500 shrink-0 mt-0.5" /> :
-             <Loader className="w-5 h-5 text-blue-500 animate-spin shrink-0 mt-0.5" />}
-            <p className={`text-sm ${status.type === 'error' ? 'text-red-800' : status.type === 'success' ? 'text-green-800' : 'text-blue-800'}`}>{status.message}</p>
-          </div>
-        )}
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
 
+        {/* ── Home ── */}
         {view === 'home' && (
-          <div className="text-center max-w-4xl mx-auto pt-12">
-            <h1 className="text-5xl font-bold text-[#0f172a] mb-4">Smart Content <span className="text-[#0ea5e9]">Fact-Checking</span></h1>
-            <p className="text-lg text-gray-600 mb-8">Brave + Google Search &bull; Claude AI rewrites &bull; GSC keyword optimization</p>
-            <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="bg-[#0ea5e9] text-white px-10 py-4 rounded-lg text-lg font-bold hover:bg-[#0284c7]">
-              {savedConfig ? 'Go to Dashboard' : 'Get Started'}
-            </button>
+          <div className="co-view relative max-w-3xl mx-auto pt-10 sm:pt-20 pb-10 text-center">
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 h-72 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,0.14),transparent_65%)]" />
+            <span className="relative inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-700 shadow-sm mb-6">
+              <ShieldCheck className="w-3.5 h-3.5" /> Fact-checked updates, published safely to Webflow
+            </span>
+            <h1 className="relative text-4xl sm:text-6xl font-semibold tracking-tight text-slate-900 leading-[1.05]">
+              Keep every blog<br /><span className="bg-gradient-to-r from-sky-500 to-indigo-500 bg-clip-text text-transparent">accurate & current</span>
+            </h1>
+            <p className="relative mt-5 text-base sm:text-lg text-slate-500 max-w-xl mx-auto">
+              Live search verifies facts, Claude rewrites what's outdated, and GSC keywords sharpen every update.
+            </p>
+            <div className="relative mt-8 flex items-center justify-center gap-3">
+              <button onClick={() => setView(savedConfig ? 'dashboard' : 'setup')} className="btn btn-dark px-5 py-2.5 text-[15px]">
+                {savedConfig ? 'Open dashboard' : 'Get started'}<ArrowRight className="w-4 h-4" />
+              </button>
+              {savedConfig && <button onClick={() => setView('setup')} className="btn btn-secondary px-5 py-2.5 text-[15px]">Settings</button>}
+            </div>
+            <div className="relative mt-16 grid sm:grid-cols-3 gap-3 text-left">
+              {[
+                [Search, 'Live verification', 'Brave + Google search check every claim, price and stat.'],
+                [TrendingUp, 'GSC-aware', 'Upload Search Console data to weave in ranking keywords.'],
+                [ShieldCheck, 'Publish-safe', 'Tables, embeds and lists are locked and verified on publish.'],
+              ].map(([Icon, t, d]) => (
+                <div key={t} className="card p-4">
+                  <Icon className="w-5 h-5 text-sky-500 mb-2.5" />
+                  <p className="text-sm font-semibold text-slate-900">{t}</p>
+                  <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">{d}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
+        {/* ── Setup ── */}
         {view === 'setup' && (
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-xl p-8 border shadow-sm">
-              <h2 className="text-2xl font-bold mb-6">Configuration</h2>
-              <div className="space-y-4">
-                {[
-                  ['Claude API Key *', 'anthropicKey', 'sk-ant-...'],
-                  ['Brave Search Key *', 'braveKey', 'BSA...'],
-                  ['Webflow Token *', 'webflowKey', 'Token'],
-                  ['Collection ID *', 'collectionId', 'From Webflow CMS'],
-                  ['Site ID (for image uploads)', 'siteId', 'From Webflow site settings']
-                ].map(([label, key, ph]) => (
-                  <div key={key}>
-                    <label className="block text-sm font-semibold mb-1">{label}</label>
-                    <input
-                      type={['collectionId', 'siteId'].includes(key) ? 'text' : 'password'}
-                      value={config[key]}
-                      onChange={e => setConfig({...config, [key]: e.target.value})}
-                      placeholder={ph}
-                      className="w-full bg-gray-50 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
-                    />
+          <div className="co-view max-w-xl mx-auto">
+            <div className="mb-6">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Settings</h1>
+              <p className="text-sm text-slate-500 mt-1">Keys are stored only in this browser.</p>
+            </div>
+            <div className="card p-6 space-y-4">
+              {[
+                ['Claude API key', 'anthropicKey', 'sk-ant-...', true],
+                ['Brave Search key', 'braveKey', 'BSA...', true],
+                ['Webflow token', 'webflowKey', 'Token', true],
+                ['Collection ID', 'collectionId', 'From Webflow CMS', true],
+                ['Site ID', 'siteId', 'Optional, for image uploads', false],
+              ].map(([label, key, ph, req]) => (
+                <div key={key}>
+                  <label className="label" htmlFor={`cfg-${key}`}>{label}{req && <span className="text-sky-500 ml-0.5">*</span>}</label>
+                  <input
+                    id={`cfg-${key}`}
+                    type={['collectionId', 'siteId'].includes(key) ? 'text' : 'password'}
+                    value={config[key]}
+                    onChange={e => setConfig({...config, [key]: e.target.value})}
+                    placeholder={ph}
+                    autoComplete="off"
+                    className="input font-mono text-[13px]"
+                  />
+                </div>
+              ))}
+              <p className="text-xs text-slate-400 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span>Site ID auto-detects when you load blogs. Only enter manually if auto-detection fails.
+                {detectedSiteId && <span className="text-emerald-600 font-medium ml-1">Auto-detected: {detectedSiteId}</span>}</span>
+              </p>
+              <button onClick={saveConfig} disabled={loading} className="btn btn-primary w-full py-2.5">
+                {loading ? <><Loader className="w-4 h-4 animate-spin" />Connecting…</> : 'Save & connect'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Dashboard ── */}
+        {view === 'dashboard' && (
+          <div className="co-view">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Blog posts</h1>
+                <p className="text-sm text-slate-500 mt-1">
+                  {blogs.length
+                    ? <>{blogs.length} posts{gscData && <> · <span className="text-violet-600">{gscData.blogsCount} with GSC data</span></>}</>
+                    : 'Load your Webflow collection to get started.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setShowGscModal(true)} className="btn btn-secondary">
+                  <TrendingUp className="w-4 h-4 text-violet-500" />{gscData ? `GSC · ${gscData.blogsCount}` : 'Upload GSC'}
+                </button>
+                <button onClick={testConnection} disabled={loading} className="btn btn-ghost"><Zap className="w-4 h-4" />Test</button>
+                <button onClick={fetchBlogsQuick} disabled={loading} className="btn btn-secondary">Quick load</button>
+                <button onClick={() => fetchBlogs(true)} disabled={loading} className="btn btn-dark">
+                  <RefreshCw className={`w-4 h-4 ${loading && !analyzingId ? 'animate-spin' : ''}`} />Load all
+                </button>
+              </div>
+            </div>
+
+            {analyzingId && selectedBlog && (
+              <div className="card p-4 mb-5 co-slide">
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-sky-600 mb-0.5">Smart Check running</p>
+                    <p className="text-sm font-semibold text-slate-900 truncate">{selectedBlog.fieldData.name}</p>
+                  </div>
+                  <span className="text-sm text-slate-500 shrink-0"><ElapsedTimer /></span>
+                </div>
+                <div className="co-progress" />
+                <p className="text-xs text-slate-400 mt-2.5">Searching sources, verifying claims and rewriting outdated sections. This usually takes 1–3 minutes.</p>
+              </div>
+            )}
+
+            {blogs.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search posts…" className="input pl-9 pr-8" />
+                  {query && <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
+                </div>
+                <div className="seg overflow-x-auto max-w-full">
+                  {[['all', 'All'], ['gsc', 'GSC'], ['BOFU', 'BOFU'], ['MOFU', 'MOFU'], ['TOFU', 'TOFU']]
+                    .filter(([k]) => k !== 'gsc' || gscData)
+                    .map(([k, label]) => (
+                      <button key={k} onClick={() => setFilter(k)} className={`seg-btn px-2.5 py-1 text-[13px] ${filter === k ? 'seg-btn-active' : ''}`}>
+                        {label}<span className="text-[11px] text-slate-400 tabular-nums">{filterCounts[k]}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {loading && !blogs.length ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="card p-4 space-y-3">
+                    <div className="co-skeleton h-4 w-16" />
+                    <div className="co-skeleton h-4 w-11/12" />
+                    <div className="co-skeleton h-3 w-full" />
+                    <div className="co-skeleton h-3 w-2/3" />
+                    <div className="co-skeleton h-9 w-full mt-2" />
                   </div>
                 ))}
-                <p className="text-xs text-gray-400">
-                  Site ID auto-detects when you load blogs. Only enter manually if auto-detection fails.
-                  {detectedSiteId && <span className="text-green-600 font-medium ml-1">Auto-detected: {detectedSiteId}</span>}
-                </p>
-                <button onClick={saveConfig} disabled={loading} className="w-full bg-[#0ea5e9] text-white py-3 rounded-lg font-semibold hover:bg-[#0284c7] disabled:opacity-50">
-                  {loading ? 'Saving...' : 'Save & Connect'}
-                </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {view === 'dashboard' && (
-          <div>
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-              <h2 className="text-2xl font-bold">Blog Posts</h2>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button onClick={() => setShowGscModal(true)} className="bg-purple-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 text-sm font-semibold">
-                  <TrendingUp className="w-4 h-4" />
-                  {gscData ? `GSC: ${gscData.blogsCount} blogs` : 'Upload GSC'}
-                </button>
-                <button onClick={testConnection} disabled={loading} className="bg-blue-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-600"><Zap className="w-4 h-4 inline mr-1" />Test</button>
-                <button onClick={fetchBlogsQuick} disabled={loading} className="bg-green-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-600">Quick Load</button>
-                <button onClick={() => fetchBlogs(true)} disabled={loading} className="bg-white text-gray-700 px-3 py-2 rounded-lg text-sm border hover:bg-gray-50">
-                  <RefreshCw className={`w-4 h-4 inline mr-1 ${loading ? 'animate-spin' : ''}`} />Load All
-                </button>
+            ) : !blogs.length ? (
+              <div className="card border-dashed py-16 px-6 text-center">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-sky-50 flex items-center justify-center"><FileText className="w-6 h-6 text-sky-500" /></div>
+                <p className="font-semibold text-slate-900">No posts loaded yet</p>
+                <p className="text-sm text-slate-500 mt-1 mb-5">Quick load pulls cached posts in seconds.</p>
+                <button onClick={fetchBlogsQuick} className="btn btn-primary">Quick load</button>
               </div>
-            </div>
-
-            {loading ? (
-              <div className="text-center py-12"><Loader className="w-10 h-10 text-[#0ea5e9] animate-spin mx-auto mb-3" /><p className="text-gray-500">Loading...</p></div>
+            ) : visibleRows.length === 0 ? (
+              <div className="text-center py-16 text-sm text-slate-500">
+                No posts match “{query}”.{' '}
+                <button onClick={() => { setQuery(''); setFilter('all'); }} className="text-sky-600 font-medium hover:underline">Clear filters</button>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {blogs.map(blog => {
-                  const gsc = getGscKeywordsForBlog(blog);
-                  return (
-                    <div key={blog.id} className="bg-white rounded-xl p-5 border hover:shadow-md transition-shadow">
-                      <h3 className="font-semibold text-[#0f172a] mb-2 line-clamp-2 text-sm">{blog.fieldData.name}</h3>
-                      <p className="text-xs text-gray-500 mb-3 line-clamp-2">{blog.fieldData['post-summary'] || 'No description'}</p>
-                      {gsc && (
-                        <div className="mb-3 space-y-1">
-                          <div className="flex items-center gap-1 text-xs bg-purple-50 border border-purple-200 rounded px-2 py-1">
-                            <TrendingUp className="w-3 h-3 text-purple-600" />
-                            <span className="text-purple-700 font-medium">{Math.round(gsc.clicks)} clicks &bull; Pos {gsc.position.toFixed(1)}</span>
-                          </div>
-                          {gsc.hasKeywords && <div className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1 truncate">
-                            {gsc.keywords.slice(0, 3).map(k => k.query).join(', ')}
-                          </div>}
-                        </div>
-                      )}
-                      <button onClick={() => analyzeBlog(blog)} disabled={loading} className="w-full bg-[#0ea5e9] text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7] disabled:opacity-50">
-                        {loading && selectedBlog?.id === blog.id ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Smart Check'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {view === 'review' && result && (
-          <div className="space-y-4">
-            {result.widgetWarnings?.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
-                <p className="text-sm font-semibold text-red-800 mb-1">⚠ Widget warnings — check before publishing</p>
-                {result.widgetWarnings.map((w, i) => (
-                  <p key={i} className="text-xs text-red-700">{w}</p>
+                {visibleRows.map(({ blog, gsc, type }) => (
+                  <BlogCard key={blog.id} blog={blog} gsc={gsc} type={type}
+                    busy={analyzingId === blog.id} disabled={loading} onCheck={onCheckBlog} />
                 ))}
               </div>
             )}
-            {result.skipped?.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
-                <p className="text-sm font-semibold text-amber-800 mb-1">⏭ Skipped — apply manually if needed ({result.skipped.length})</p>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                  {result.skipped.map((sk, i) => (
-                    <div key={i} className="text-xs text-amber-800 bg-white rounded border border-amber-100 p-2">
-                      <span className="font-medium">{sk.where}:</span> {sk.reason}
-                      <span className="text-amber-600"> — {sk.why}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {result.changelog?.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                <p className="text-sm font-semibold text-blue-900 mb-2">📋 What changed ({result.changelog.length})</p>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {result.changelog.map((c, i) => (
-                    <div key={i} className="text-xs bg-white rounded border border-blue-100 p-2">
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mr-1.5 ${
-                        c.type === 'fix' ? 'bg-amber-100 text-amber-800' :
-                        c.type === 'add' ? 'bg-emerald-100 text-emerald-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>{c.type.toUpperCase()}</span>
-                      <span className="font-medium text-gray-700">{c.where}</span>
-                      <p className="text-gray-600 mt-1">{c.reason}</p>
-                      {c.from && <p className="text-red-600 mt-0.5 line-through">{c.from}</p>}
-                      {c.to && <p className="text-emerald-700 mt-0.5">{c.to}</p>}
-                    </div>
-                  ))}
-                </div>
-                {result.verified?.length > 0 && (
-                  <p className="text-xs text-gray-500 mt-2">✓ Verified, no change needed: {result.verified.join(' · ')}</p>
-                )}
-              </div>
-            )}
-            {result.changelog?.length === 0 && result.searchesUsed > 0 && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
-                <p className="text-sm text-emerald-800">✓ Audit found nothing outdated — blog is current.</p>
-              </div>
-            )}
-            {result.gscKeywordsUsed?.length > 0 && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <p className="text-sm font-semibold text-purple-800 mb-2">Optimized with {result.gscKeywordsUsed.length} GSC keywords</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {result.gscKeywordsUsed.slice(0, 10).map((kw, i) => (
-                    <span key={i} className="text-xs bg-white px-2 py-0.5 rounded border border-purple-200 text-purple-700">{kw.query}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+          </div>
+        )}
 
-            <div className="bg-white rounded-lg border p-3 flex items-center gap-4 flex-wrap text-sm">
-              <span className="text-gray-600">{result.searchesUsed} searches</span>
-              <span className="text-gray-600">{result.duration}s</span>
-              <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-medium">{result.blogType}</span>
-              {result.widgetsProtected > 0 && <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-xs font-medium">{result.widgetsProtected} widgets protected</span>}
-              {highlightedData && <span className="bg-sky-100 text-sky-800 px-2 py-0.5 rounded text-xs font-medium">{highlightedData.changesCount} changes</span>}
-              {result.tldrAdded && <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-xs font-medium">TL;DR added</span>}
-              {result.fromCache && <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">cached</span>}
+        {/* ── Review ── */}
+        {view === 'review' && result && (
+          <div className="co-view">
+            <div className="flex items-center gap-2 mb-5">
+              <button onClick={backToDashboard} className="btn btn-ghost -ml-2 px-2"><ArrowLeft className="w-4 h-4" />All posts</button>
             </div>
 
-            {/* Title + meta fields — name=meta-title, excerpt=meta-description */}
-            <div className="bg-white rounded-lg border p-4 space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Blog Title <span className="text-gray-400 normal-case font-normal">(updates: name + meta-title)</span></label>
-                <input value={blogTitle} onChange={e => { setBlogTitle(e.target.value); setMetaTitle(e.target.value); }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Excerpt / Meta Description <span className="text-gray-400 normal-case font-normal">(updates: excerpt + meta-description)</span></label>
-                <textarea value={metaSeoDescription} onChange={e => { setMetaSeoDescription(e.target.value); setMetaDescription(e.target.value); }} rows={2} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none" />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {[['edit', 'Edit', Eye], ['preview', 'Preview Changes', Search], ['html', 'HTML Source', Code]].map(([mode, label, Icon]) => (
-                <button key={mode} onClick={() => {
-                    if (mode === 'html') { switchToHtmlMode(); }
-                    else { if (editMode === 'edit') flushEditorContent(); setEditMode(mode); }
-                  }}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${editMode === mode ? 'bg-[#0ea5e9] text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>
-                  <Icon className="w-4 h-4" />{label}
-                </button>
-              ))}
-              {editMode === 'preview' && (
-                <label className="flex items-center gap-2 ml-4 text-sm text-gray-600 cursor-pointer select-none">
-                  <input type="checkbox" checked={showHighlights} onChange={e => setShowHighlights(e.target.checked)} className="rounded" />
-                  Show highlights
-                </label>
-              )}
-            </div>
-
-            {editMode === 'edit' && (
-              <div className="bg-white rounded-lg border shadow-sm">
-                <div className="flex items-center gap-1 p-2 border-b bg-gray-50 rounded-t-lg flex-wrap sticky top-0 z-30 shadow-sm">
-                  <button onClick={() => execCmd('bold')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Bold"><Bold className="w-4 h-4" /></button>
-                  <button onClick={() => execCmd('italic')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Italic"><Italic className="w-4 h-4" /></button>
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  <div className="relative">
-                    <button onClick={() => setShowHeadingMenu(!showHeadingMenu)} className="px-2 py-1.5 rounded hover:bg-gray-200 text-gray-700 text-sm font-medium flex items-center gap-1">
-                      <Type className="w-4 h-4" />Heading<ChevronDown className="w-3 h-3" />
-                    </button>
-                    {showHeadingMenu && (
-                      <div className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg z-50 py-1 min-w-[120px]">
-                        {[2, 3, 4].map(l => (
-                          <button key={l} onClick={() => formatHeading(l)} className="block w-full text-left px-3 py-1.5 hover:bg-gray-100 text-sm">
-                            <span className="font-semibold">H{l}</span> <span className="text-gray-400">Heading {l}</span>
-                          </button>
-                        ))}
-                        <button onClick={() => { execCmd('formatBlock', 'p'); setShowHeadingMenu(false); }} className="block w-full text-left px-3 py-1.5 hover:bg-gray-100 text-sm text-gray-600">Paragraph</button>
-                      </div>
-                    )}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
+              {/* Editor column */}
+              <section className="min-w-0 space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="seg">
+                    {[['edit', 'Edit', Eye], ['preview', 'Changes', Search], ['html', 'HTML', Code]].map(([mode, label, Icon]) => (
+                      <button key={mode} onClick={() => {
+                          if (mode === 'html') { switchToHtmlMode(); }
+                          else { if (editMode === 'edit') flushEditorContent(); setEditMode(mode); }
+                        }}
+                        className={`seg-btn ${editMode === mode ? 'seg-btn-active' : ''}`}>
+                        <Icon className="w-4 h-4" />{label}
+                      </button>
+                    ))}
                   </div>
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  <button onClick={() => insertListCmd('bullet')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Bullet list"><List className="w-4 h-4" /></button>
-                  <button onClick={() => insertListCmd('number')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Numbered list"><ListOrdered className="w-4 h-4" /></button>
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  <button onClick={openLinkModal} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Link"><Link2 className="w-4 h-4" /></button>
-
-                  <input type="file" accept="image/*" id="img-upload" className="hidden" onChange={handleImageUpload} />
-                  <label htmlFor="img-upload" className="p-2 rounded hover:bg-gray-200 text-gray-700 cursor-pointer" title="Upload image">
-                    <ImagePlus className="w-4 h-4" />
-                  </label>
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  <button onClick={() => execCmd('undo')} className="p-2 rounded hover:bg-gray-200 text-gray-700" title="Undo"><Undo2 className="w-4 h-4" /></button>
+                  {editMode === 'preview' && (
+                    <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                      <input type="checkbox" checked={showHighlights} onChange={e => setShowHighlights(e.target.checked)} className="rounded border-slate-300 text-sky-500 focus:ring-sky-500/30" />
+                      Highlight changes
+                    </label>
+                  )}
                 </div>
 
-                <div
-                  ref={editorRef}
-                  className="co-editor"
-                  onInput={handleBlockInput}
-                  onClick={handleEditorClick}
-                  onKeyDown={handleEditorKeyDown}
-                  onFocus={handleEditorFocusIn}
-                  onPaste={handleEditorPaste}
-                  style={{ minHeight: 600 }}
-                />
-                <div className="px-4 py-2 border-t bg-gray-50 rounded-b-lg text-xs text-gray-500 flex items-center gap-4">
-                  <span>🔒 Tables, videos & embeds are protected — use their ✏️ Edit buttons to change them safely</span>
-                  <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500" /> blue edge = your edit</span>
+                {editMode === 'edit' && (
+                  <div className="card">
+                    {/* mousedown preventDefault keeps the caret/selection in the block while clicking tools */}
+                    <div className="sticky top-14 z-30 flex items-center gap-0.5 px-2 py-1.5 border-b border-slate-200/80 bg-white/90 backdrop-blur rounded-t-xl flex-wrap"
+                      onMouseDown={e => { if (e.target.closest('button')) e.preventDefault(); }}>
+                      <button onClick={() => execCmd('bold')} className="tool" title="Bold"><Bold className="w-4 h-4" /></button>
+                      <button onClick={() => execCmd('italic')} className="tool" title="Italic"><Italic className="w-4 h-4" /></button>
+                      <div className="tool-sep" />
+
+                      <div className="relative">
+                        <button onClick={() => setShowHeadingMenu(!showHeadingMenu)} className="tool px-2 font-medium">
+                          <Type className="w-4 h-4" />Heading<ChevronDown className="w-3 h-3" />
+                        </button>
+                        {showHeadingMenu && (
+                          <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-xl shadow-slate-900/10 z-50 p-1 min-w-[150px] co-pop">
+                            {[2, 3, 4].map(l => (
+                              <button key={l} onClick={() => formatHeading(l)} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-sm">
+                                <span className="font-semibold text-slate-900 w-6">H{l}</span><span className="text-slate-500">Heading {l}</span>
+                              </button>
+                            ))}
+                            <button onClick={() => { execCmd('formatBlock', 'p'); setShowHeadingMenu(false); }} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-sm">
+                              <span className="font-semibold text-slate-900 w-6">¶</span><span className="text-slate-500">Paragraph</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="tool-sep" />
+
+                      <button onClick={() => insertListCmd('bullet')} className="tool" title="Bullet list"><List className="w-4 h-4" /></button>
+                      <button onClick={() => insertListCmd('number')} className="tool" title="Numbered list"><ListOrdered className="w-4 h-4" /></button>
+                      <div className="tool-sep" />
+
+                      <button onClick={openLinkModal} className="tool" title="Link"><Link2 className="w-4 h-4" /></button>
+                      <input type="file" accept="image/*" id="img-upload" className="hidden" onChange={handleImageUpload} />
+                      <label htmlFor="img-upload" className="tool" title="Upload image"><ImagePlus className="w-4 h-4" /></label>
+                      <div className="tool-sep" />
+
+                      <button onClick={() => execCmd('undo')} className="tool" title="Undo"><Undo2 className="w-4 h-4" /></button>
+                    </div>
+
+                    <div
+                      ref={editorRef}
+                      className="co-editor"
+                      onInput={handleBlockInput}
+                      onClick={handleEditorClick}
+                      onKeyDown={handleEditorKeyDown}
+                      onFocus={handleEditorFocusIn}
+                      onPaste={handleEditorPaste}
+                      style={{ minHeight: 600 }}
+                    />
+                    <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/60 rounded-b-xl text-xs text-slate-500 flex items-center gap-x-5 gap-y-1 flex-wrap">
+                      <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-slate-400" />Tables, videos & embeds are protected. Use their Edit buttons to change them.</span>
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500" />Blue edge = your edit</span>
+                    </div>
+                  </div>
+                )}
+
+                {editMode === 'preview' && (
+                  <div className="card">
+                    <div className="co-editor" style={{ minHeight: 400 }}
+                      dangerouslySetInnerHTML={{ __html: showHighlights && highlightedData ? highlightedData.html : editedContent }} />
+                  </div>
+                )}
+
+                {editMode === 'html' && (
+                  <div className="card overflow-hidden">
+                    <textarea
+                      value={htmlSource}
+                      onChange={e => setHtmlSource(e.target.value)}
+                      className="block w-full font-mono text-xs bg-slate-950 text-slate-200 caret-sky-400 p-5 focus:outline-none"
+                      style={{ minHeight: 560, resize: 'vertical', lineHeight: 1.6, tabSize: 2 }}
+                      spellCheck={false}
+                    />
+                    <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-white">
+                      <span className="text-xs text-slate-500">Edits here replace the editor content.</span>
+                      <button onClick={applyHtmlSource} className="btn btn-primary">Apply HTML</button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Sidebar */}
+              <aside className="space-y-3 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto co-scroll lg:pr-1 -mr-1 pb-1">
+                <div className="card p-4">
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    <span className={`chip ring-1 ring-inset ${TYPE_STYLES[result.blogType]}`}>{result.blogType}</span>
+                    {highlightedData && <span className="chip bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/15">{highlightedData.changesCount} changes</span>}
+                    <span className="chip bg-slate-100 text-slate-600">{result.searchesUsed} searches</span>
+                    <span className="chip bg-slate-100 text-slate-600">{result.duration}s</span>
+                    {result.widgetsProtected > 0 && <span className="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/15">{result.widgetsProtected} widgets locked</span>}
+                    {result.tldrAdded && <span className="chip bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15">TL;DR added</span>}
+                    {result.fromCache && <span className="chip bg-slate-100 text-slate-500">cached</span>}
+                  </div>
+                  <button onClick={publishToWebflow} disabled={loading} className="btn btn-success w-full py-2.5">
+                    {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {loading ? 'Publishing…' : 'Publish to Webflow'}
+                  </button>
+                  <button onClick={copyHTMLToClipboard} className={`btn w-full mt-2 ${copied ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'btn-secondary'}`}>
+                    {copied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}{copied ? 'Copied' : 'Copy HTML'}
+                  </button>
                 </div>
-              </div>
-            )}
 
-            {editMode === 'preview' && (
-              <div className="bg-white rounded-lg border shadow-sm">
-                <div className="co-editor" style={{ minHeight: 400 }}
-                  dangerouslySetInnerHTML={{ __html: showHighlights && highlightedData ? highlightedData.html : editedContent }} />
-              </div>
-            )}
+                {result.widgetWarnings?.length > 0 && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5 mb-1.5"><AlertCircle className="w-4 h-4" />Check widgets before publishing</p>
+                    {result.widgetWarnings.map((w, i) => <p key={i} className="text-xs text-red-700 leading-relaxed">{w}</p>)}
+                  </div>
+                )}
 
-            {editMode === 'html' && (
-              <div className="space-y-3">
-                <textarea
-                  value={htmlSource}
-                  onChange={e => setHtmlSource(e.target.value)}
-                  className="w-full font-mono text-xs bg-gray-900 text-green-400 border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
-                  style={{ minHeight: 500, resize: 'vertical', lineHeight: 1.5, tabSize: 2 }}
-                  spellCheck={false}
-                />
-                <button onClick={applyHtmlSource} className="bg-[#0ea5e9] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0284c7]">
-                  Apply HTML Changes
-                </button>
-              </div>
-            )}
+                <div className="card p-4 space-y-3">
+                  <div>
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <label className="text-xs font-medium text-slate-600" htmlFor="co-title">Title <span className="text-slate-400 font-normal">· name + meta-title</span></label>
+                      <span className="text-[11px]"><CharCount value={blogTitle} max={60} /></span>
+                    </div>
+                    <input id="co-title" value={blogTitle} onChange={e => { setBlogTitle(e.target.value); setMetaTitle(e.target.value); }} className="input" />
+                  </div>
+                  <div>
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <label className="text-xs font-medium text-slate-600" htmlFor="co-meta">Meta description <span className="text-slate-400 font-normal">· excerpt + meta</span></label>
+                      <span className="text-[11px]"><CharCount value={metaSeoDescription} max={160} /></span>
+                    </div>
+                    <textarea id="co-meta" value={metaSeoDescription} onChange={e => { setMetaSeoDescription(e.target.value); setMetaDescription(e.target.value); }} rows={3} className="input resize-none leading-relaxed" />
+                  </div>
+                </div>
 
-            <div className="flex items-center gap-3 flex-wrap bg-white rounded-lg border p-4">
-              <button onClick={publishToWebflow} disabled={loading} className="bg-green-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
-                {loading ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Publish to Webflow
-              </button>
-              <button onClick={copyHTMLToClipboard} className={`px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 border ${copied ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-                <Copy className="w-4 h-4" />{copied ? 'Copied!' : 'Copy HTML'}
-              </button>
-              <button onClick={() => { setView('dashboard'); setResult(null); setSelectedBlog(null); setHighlightedData(null); }}
-                className="bg-white text-gray-500 px-4 py-2.5 rounded-lg border hover:bg-gray-50 text-sm">Back</button>
+                {result.changelog?.length > 0 && (
+                  <Section title="What changed" count={result.changelog.length}>
+                    <div className="space-y-2">
+                      {result.changelog.map((c, i) => (
+                        <div key={i} className="text-xs rounded-lg border border-slate-100 bg-slate-50/60 p-2.5">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className={`chip text-[10px] uppercase tracking-wide ${
+                              c.type === 'fix' ? 'bg-amber-100 text-amber-800' :
+                              c.type === 'add' ? 'bg-emerald-100 text-emerald-800' :
+                              'bg-sky-100 text-sky-800'
+                            }`}>{c.type || 'update'}</span>
+                            <span className="font-medium text-slate-700 truncate">{c.where}</span>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed">{c.reason}</p>
+                          {c.from && <p className="text-red-600/80 mt-1 line-through leading-relaxed">{c.from}</p>}
+                          {c.to && <p className="text-emerald-700 mt-0.5 leading-relaxed">{c.to}</p>}
+                        </div>
+                      ))}
+                    </div>
+                    {result.verified?.length > 0 && (
+                      <p className="text-xs text-slate-500 mt-3 leading-relaxed"><CheckCircle className="w-3.5 h-3.5 inline -mt-0.5 mr-1 text-emerald-500" />Verified, no change needed: {result.verified.join(' · ')}</p>
+                    )}
+                  </Section>
+                )}
+
+                {result.changelog?.length === 0 && result.searchesUsed > 0 && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 shrink-0" />Audit found nothing outdated. This blog is current.
+                  </div>
+                )}
+
+                {result.skipped?.length > 0 && (
+                  <Section title="Skipped, apply manually" count={result.skipped.length} tone="amber" defaultOpen={false}>
+                    <div className="space-y-2">
+                      {result.skipped.map((sk, i) => (
+                        <div key={i} className="text-xs rounded-lg border border-amber-100 bg-amber-50/50 p-2.5 text-amber-900 leading-relaxed">
+                          <span className="font-medium">{sk.where}:</span> {sk.reason}
+                          <span className="text-amber-700/80"> · {sk.why}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Section>
+                )}
+
+                {result.gscKeywordsUsed?.length > 0 && (
+                  <Section title="GSC keywords used" count={result.gscKeywordsUsed.length} tone="violet" defaultOpen={false}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {result.gscKeywordsUsed.slice(0, 10).map((kw, i) => (
+                        <span key={i} className="chip bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/15 font-normal">{kw.query}</span>
+                      ))}
+                    </div>
+                  </Section>
+                )}
+              </aside>
             </div>
           </div>
         )}
 
+        {/* ── Success ── */}
         {view === 'success' && (
-          <div className="max-w-md mx-auto text-center py-16">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle className="w-10 h-10 text-green-600" /></div>
-            <h2 className="text-2xl font-bold mb-2">Published!</h2>
-            <p className="text-gray-500 mb-6">Content updated on Webflow</p>
-            <button onClick={() => { setView('dashboard'); setResult(null); setSelectedBlog(null); setHighlightedData(null); }}
-              className="bg-[#0ea5e9] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#0284c7]">Back to Dashboard</button>
+          <div className="co-view max-w-md mx-auto text-center py-16">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 flex items-center justify-center mx-auto mb-5 co-pop">
+              <CheckCircle className="w-7 h-7 text-emerald-600" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Published</h1>
+            <p className="text-slate-500 mt-1.5 mb-7 text-sm">{blogTitle ? <>“{blogTitle}” is updated on Webflow.</> : 'Content updated on Webflow.'}</p>
+            <button onClick={backToDashboard} className="btn btn-dark px-5 py-2.5">Check another post<ArrowRight className="w-4 h-4" /></button>
           </div>
         )}
-      </div>
+      </main>
 
+      {/* ── Table editor ── */}
       {tableEditor.show && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
-            <div className="px-5 py-3 border-b flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">✏️ Edit table</h3>
-              <div className="flex gap-2">
-                <button onClick={tableAddRow} className="text-xs px-3 py-1.5 rounded-lg border hover:border-sky-400 hover:text-sky-600">+ Row</button>
-                <button onClick={tableAddCol} className="text-xs px-3 py-1.5 rounded-lg border hover:border-sky-400 hover:text-sky-600">+ Column</button>
-              </div>
+        <Modal size="max-w-4xl" className="max-h-[85vh] flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-slate-900">Edit table</h3>
+            <div className="flex gap-2">
+              <button onClick={tableAddRow} className="btn btn-secondary py-1.5 text-xs">+ Row</button>
+              <button onClick={tableAddCol} className="btn btn-secondary py-1.5 text-xs">+ Column</button>
             </div>
-            <div className="p-4 overflow-auto flex-1">
-              <table className="w-full border-collapse">
-                <tbody>
-                  <tr>
-                    {tableEditor.rows[0]?.cells.map((_, ci) => (
-                      <td key={`del-${ci}`} className="text-center pb-1">
-                        <button onClick={() => tableDelCol(ci)} className="text-[10px] text-gray-400 hover:text-red-500" title="Delete column">✕ col</button>
+          </div>
+          <div className="p-5 overflow-auto flex-1 co-scroll">
+            <table className="w-full border-collapse">
+              <tbody>
+                <tr>
+                  {tableEditor.rows[0]?.cells.map((_, ci) => (
+                    <td key={`del-${ci}`} className="text-center pb-1.5">
+                      <button onClick={() => tableDelCol(ci)} className="text-[11px] text-slate-400 hover:text-red-500 px-1.5 rounded" title="Delete column">✕ col</button>
+                    </td>
+                  ))}
+                  <td />
+                </tr>
+                {tableEditor.rows.map((row, ri) => (
+                  <tr key={ri}>
+                    {row.cells.map((cell, ci) => (
+                      <td key={ci} className="border border-slate-200 p-0 align-top">
+                        <textarea
+                          value={cell.html}
+                          onChange={e => tableCell(ri, ci, e.target.value)}
+                          rows={2}
+                          className={`block w-full min-w-[120px] p-2 text-sm resize-y focus:outline-none focus:bg-sky-50/40 focus:ring-2 focus:ring-inset focus:ring-sky-300 ${cell.tag === 'th' ? 'font-semibold bg-slate-50' : ''}`}
+                        />
                       </td>
                     ))}
-                    <td />
+                    <td className="pl-2 align-middle">
+                      <button onClick={() => tableDelRow(ri)} className="text-[11px] text-slate-400 hover:text-red-500 p-1 rounded" title="Delete row">✕</button>
+                    </td>
                   </tr>
-                  {tableEditor.rows.map((row, ri) => (
-                    <tr key={ri}>
-                      {row.cells.map((cell, ci) => (
-                        <td key={ci} className="border border-gray-200 p-0 align-top">
-                          <textarea
-                            value={cell.html}
-                            onChange={e => tableCell(ri, ci, e.target.value)}
-                            rows={2}
-                            className={`w-full min-w-[120px] p-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-sky-300 ${cell.tag === 'th' ? 'font-semibold bg-gray-50' : ''}`}
-                          />
-                        </td>
-                      ))}
-                      <td className="pl-2 align-middle">
-                        <button onClick={() => tableDelRow(ri)} className="text-[10px] text-gray-400 hover:text-red-500" title="Delete row">✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="text-xs text-gray-400 mt-3">Cells accept simple HTML (&lt;strong&gt;, &lt;a href&gt;). The table is rebuilt from this grid — it cannot come out malformed.</p>
-            </div>
-            <div className="px-5 py-3 border-t flex justify-end gap-2">
-              <button onClick={() => setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [], prefix: '', suffix: '' })} className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">Cancel</button>
-              <button onClick={saveTableEdit} className="px-4 py-2 rounded-lg bg-[#0ea5e9] text-white text-sm font-medium hover:bg-sky-600">Save table</button>
-            </div>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-slate-400 mt-3">Cells accept simple HTML (&lt;strong&gt;, &lt;a href&gt;). The table is rebuilt from this grid, so it can't come out malformed.</p>
           </div>
-        </div>
+          <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end gap-2">
+            <button onClick={() => setTableEditor({ show: false, wid: null, attrs: '', hasThead: false, rows: [], prefix: '', suffix: '' })} className="btn btn-secondary">Cancel</button>
+            <button onClick={saveTableEdit} className="btn btn-primary">Save table</button>
+          </div>
+        </Modal>
       )}
 
+      {/* ── Embed editor ── */}
       {embedEditor.show && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
-            <div className="px-5 py-3 border-b">
-              <h3 className="font-semibold text-gray-800">&lt;/&gt; Edit embed HTML</h3>
-              <p className="text-xs text-gray-500 mt-0.5">e.g. swap a YouTube URL. Validated before saving — invalid HTML is rejected.</p>
-            </div>
-            <div className="p-4">
-              <textarea
-                value={embedEditor.html}
-                onChange={e => setEmbedEditor(m => ({ ...m, html: e.target.value, error: '' }))}
-                rows={10}
-                spellCheck={false}
-                className="w-full border rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-sky-300"
-              />
-              {embedEditor.error && <p className="text-xs text-red-600 mt-2">{embedEditor.error}</p>}
-            </div>
-            <div className="px-5 py-3 border-t flex justify-end gap-2">
-              <button onClick={() => setEmbedEditor({ show: false, wid: null, html: '', error: '' })} className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">Cancel</button>
-              <button onClick={saveEmbedEdit} className="px-4 py-2 rounded-lg bg-[#0ea5e9] text-white text-sm font-medium hover:bg-sky-600">Save embed</button>
-            </div>
+        <Modal size="max-w-2xl">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-900">Edit embed HTML</h3>
+            <p className="text-xs text-slate-500 mt-0.5">e.g. swap a YouTube URL. Invalid HTML is rejected before saving.</p>
           </div>
-        </div>
+          <div className="p-5">
+            <textarea
+              value={embedEditor.html}
+              onChange={e => setEmbedEditor(m => ({ ...m, html: e.target.value, error: '' }))}
+              rows={10}
+              spellCheck={false}
+              className="block w-full rounded-lg p-3 text-xs font-mono bg-slate-950 text-slate-200 caret-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            />
+            {embedEditor.error && <p className="text-xs text-red-600 mt-2">{embedEditor.error}</p>}
+          </div>
+          <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end gap-2">
+            <button onClick={() => setEmbedEditor({ show: false, wid: null, html: '', error: '' })} className="btn btn-secondary">Cancel</button>
+            <button onClick={saveEmbedEdit} className="btn btn-primary">Save embed</button>
+          </div>
+        </Modal>
       )}
 
+      {/* ── Link ── */}
       {showLinkModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={() => setShowLinkModal(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 space-y-3" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold">{editingLink ? 'Edit Link' : 'Insert Link'}</h3>
+        <Modal z="z-[9999]" size="max-w-sm" onClose={() => setShowLinkModal(false)}>
+          <form className="p-5 space-y-4" onSubmit={e => { e.preventDefault(); applyLink(); }}>
+            <h3 className="font-semibold text-slate-900">{editingLink ? 'Edit link' : 'Insert link'}</h3>
             <div>
-              <label className="block text-xs font-semibold mb-1">URL</label>
-              <input value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://..." className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" />
+              <label className="label" htmlFor="co-link-url">URL</label>
+              <input id="co-link-url" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://..." className="input" autoFocus />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1">Text (optional)</label>
-              <input value={linkText} onChange={e => setLinkText(e.target.value)} placeholder="Link text" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" />
+              <label className="label" htmlFor="co-link-text">Text <span className="text-slate-400 font-normal">(optional)</span></label>
+              <input id="co-link-text" value={linkText} onChange={e => setLinkText(e.target.value)} placeholder="Link text" className="input" />
             </div>
-            <div className="flex gap-2">
-              <button onClick={applyLink} className="flex-1 bg-[#0ea5e9] text-white py-2 rounded-lg font-semibold text-sm">Apply</button>
-              <button onClick={() => setShowLinkModal(false)} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm">Cancel</button>
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => setShowLinkModal(false)} className="btn btn-secondary flex-1">Cancel</button>
+              <button type="submit" disabled={!linkUrl} className="btn btn-primary flex-1">Apply</button>
             </div>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
+      {/* ── Image ── */}
       {imageAltModal.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]"
-          onClick={() => { if (imageAltModal.isUpload) { const m = editorRef.current?.querySelector('#image-insertion-marker'); if (m) m.remove(); if (imageAltModal.src) URL.revokeObjectURL(imageAltModal.src); } setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' }); }}>
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 space-y-3" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold">{imageAltModal.isUpload ? 'Add Alt Text' : 'Edit Image'}</h3>
-            <img src={imageAltModal.src} alt="" className="w-full max-h-48 object-contain rounded-lg bg-gray-100" />
+        <Modal z="z-[9999]" onClose={closeImageModal}>
+          <div className="p-5 space-y-4">
+            <h3 className="font-semibold text-slate-900">{imageAltModal.isUpload ? 'Add alt text' : 'Edit image'}</h3>
+            <img src={imageAltModal.src} alt="" className="w-full max-h-52 object-contain rounded-lg bg-slate-100 ring-1 ring-slate-200" />
             <div>
-              <label className="block text-xs font-semibold mb-1">Alt Text {imageAltModal.isUpload && <span className="text-red-500">*</span>}</label>
-              <input value={imageAltModal.currentAlt} onChange={e => setImageAltModal({...imageAltModal, currentAlt: e.target.value, error: ''})}
-                placeholder="Describe what's in the image..." className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]" autoFocus />
+              <label className="label" htmlFor="co-alt">Alt text {imageAltModal.isUpload && <span className="text-red-500">*</span>}</label>
+              <input id="co-alt" value={imageAltModal.currentAlt} onChange={e => setImageAltModal({...imageAltModal, currentAlt: e.target.value, error: ''})}
+                onKeyDown={e => { if (e.key === 'Enter') updateImageAlt(); }}
+                placeholder="Describe what's in the image…" className="input" autoFocus />
             </div>
             {imageAltModal.error && (
               <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{imageAltModal.error}</div>
             )}
-            <div className="flex gap-2">
-              <button onClick={updateImageAlt} disabled={imageAltModal.isUpload && !imageAltModal.currentAlt.trim()}
-                className="flex-1 bg-[#0ea5e9] text-white py-2 rounded-lg font-semibold text-sm disabled:opacity-50">
-                {imageAltModal.isUpload ? 'Upload & Insert' : 'Save'}
+            <div className="flex gap-2 pt-1">
+              {!imageAltModal.isUpload && <button onClick={deleteImage} className="btn btn-danger">Delete</button>}
+              <button onClick={closeImageModal} className="btn btn-secondary flex-1">Cancel</button>
+              <button onClick={updateImageAlt} disabled={imageAltModal.isUpload && !imageAltModal.currentAlt.trim()} className="btn btn-primary flex-1">
+                {imageAltModal.isUpload ? 'Insert' : 'Save'}
               </button>
-              {!imageAltModal.isUpload && <button onClick={deleteImage} className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm">Delete</button>}
-              <button onClick={() => { if (imageAltModal.isUpload) { const m = editorRef.current?.querySelector('#image-insertion-marker'); if (m) m.remove(); if (imageAltModal.src) URL.revokeObjectURL(imageAltModal.src); } setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' }); }}
-                className="flex-1 bg-gray-100 py-2 rounded-lg text-sm">Cancel</button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
+      {/* ── GSC upload ── */}
       {showGscModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={() => setShowGscModal(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 space-y-3" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold">Upload GSC Data</h3>
-            <p className="text-sm text-gray-600">Upload XLSX from Google Search Console (needs Queries + Pages sheets).</p>
-            {gscData && <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-green-800 font-medium">{gscData.totalMatches} blogs with keywords</div>}
-            <input type="file" accept=".xlsx,.xls" onChange={handleGscUpload} disabled={gscUploading} className="w-full bg-gray-50 border rounded px-3 py-2 text-sm" />
-            <button onClick={() => setShowGscModal(false)} className="w-full bg-gray-100 py-2 rounded-lg font-semibold text-sm">{gscData ? 'Done' : 'Cancel'}</button>
+        <Modal z="z-[9999]" onClose={() => setShowGscModal(false)}>
+          <div className="p-5 space-y-4">
+            <div>
+              <h3 className="font-semibold text-slate-900">Search Console data</h3>
+              <p className="text-sm text-slate-500 mt-1">Upload the XLSX export from Google Search Console (needs Queries + Pages sheets).</p>
+            </div>
+            {gscData && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0" />{gscData.totalMatches} blogs matched with keywords
+              </div>
+            )}
+            <label className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${gscUploading ? 'border-sky-300 bg-sky-50/50' : 'border-slate-200 hover:border-sky-300 hover:bg-slate-50 cursor-pointer'}`}>
+              {gscUploading ? <Loader className="w-6 h-6 text-sky-500 animate-spin" /> : <Upload className="w-6 h-6 text-slate-400" />}
+              <span className="text-sm font-medium text-slate-700">{gscUploading ? 'Processing…' : gscData ? 'Replace file' : 'Choose .xlsx file'}</span>
+              <span className="text-xs text-slate-400">Performance → Export → Excel</span>
+              <input type="file" accept=".xlsx,.xls" onChange={handleGscUpload} disabled={gscUploading} className="sr-only" />
+            </label>
+            <button onClick={() => setShowGscModal(false)} className="btn btn-secondary w-full">{gscData ? 'Done' : 'Cancel'}</button>
           </div>
-        </div>
+        </Modal>
       )}
 
-      <footer className="bg-[#0f172a] border-t border-gray-800 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-[#0ea5e9] rounded flex items-center justify-center"><Sparkles className="w-3.5 h-3.5 text-white" /></div>
-            <span className="text-sm font-semibold text-gray-300">ContentOps</span>
-            <span className="text-xs text-gray-500">by SalesRobot</span>
-          </div>
-          <div className="flex items-center gap-6 text-xs text-gray-500">
-            <span>Brave + Google Search</span>
-            <span>Claude AI</span>
-            <span>Webflow CMS</span>
-          </div>
+      <footer className="border-t border-slate-200/80 bg-white mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between flex-wrap gap-3 text-xs text-slate-400">
+          <span><span className="font-semibold text-slate-600">ContentOps</span> by SalesRobot</span>
+          <span>Brave + Google Search · Claude · Webflow CMS</span>
         </div>
       </footer>
     </div>
