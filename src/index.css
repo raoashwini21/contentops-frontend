@@ -2,16 +2,148 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ══════════════════════════════════════════════
+   BRAND TOKENS — swap these RGB channels to match
+   SalesRobot's exact palette; the whole UI follows.
+   ══════════════════════════════════════════════ */
+:root {
+  /* primary: SalesRobot sky blue (logo) */
+  --brand-50: 240 248 255;
+  --brand-100: 224 240 254;
+  --brand-200: 188 223 252;
+  --brand-300: 139 199 248;
+  --brand-400: 88 172 243;
+  --brand-500: 52 148 236;
+  --brand-600: 34 122 214;
+  --brand-700: 29 98 176;
+  --brand-800: 30 83 144;
+  --brand-900: 30 70 118;
+
+  /* accent: soft pink/magenta (site badges & background wash) */
+  --accent-50: 253 242 250;
+  --accent-100: 252 231 246;
+  --accent-200: 249 206 236;
+  --accent-300: 244 167 218;
+  --accent-400: 236 118 192;
+  --accent-500: 222 80 166;
+  --accent-600: 196 56 140;
+  --accent-700: 164 40 115;
+  --accent-800: 134 34 95;
+  --accent-900: 111 31 80;
+
+  /* ink: SalesRobot navy (CTA buttons, headings) */
+  --ink: 13 19 38;
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html { scroll-behavior: smooth; }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #ffffff;
+  color: rgb(var(--ink));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, .font-display { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.025em; }
+
+/* Soft top wash, like salesrobot.co's hero */
+.co-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 0% 0%, rgb(var(--brand-100) / .9), transparent 70%),
+    radial-gradient(55% 40% at 100% 0%, rgb(var(--accent-100) / .8), transparent 70%),
+    linear-gradient(180deg, #f5f9ff 0%, #ffffff 55%); }
+.co-dots { background-image: radial-gradient(rgb(var(--brand-300) / .35) 1px, transparent 1px); background-size: 22px 22px; }
+
+@layer components {
+  .card { @apply bg-white rounded-2xl border border-slate-200/70 shadow-[0_1px_2px_rgba(13,19,38,0.04),0_8px_24px_-14px_rgba(30,70,118,0.14)]; }
+
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap select-none
+    transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out
+    focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25
+    active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none; }
+  /* SalesRobot CTA: navy pill */
+  .btn-primary { @apply bg-ink text-white shadow-md shadow-ink/15 hover:bg-[#1c2a4d] hover:-translate-y-px hover:shadow-lg hover:shadow-ink/20; }
+  .btn-dark { @apply bg-ink text-white shadow-md shadow-ink/15 hover:bg-[#1c2a4d]; }
+  .btn-brand { @apply bg-brand-500 text-white shadow-md shadow-brand-500/25 hover:bg-brand-600; }
+  .btn-soft { @apply bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100 hover:bg-ink hover:text-white hover:ring-ink; }
+  .btn-success { @apply bg-emerald-600 text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 hover:-translate-y-px; }
+  .btn-danger { @apply bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300; }
+  /* SalesRobot secondary: outlined pill */
+  .btn-secondary { @apply bg-white text-ink border border-ink/80 hover:bg-ink hover:text-white; }
+  .btn-ghost { @apply text-slate-600 hover:bg-brand-50 hover:text-ink; }
+
+  .input { @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400
+    transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/15; }
+  .label { @apply block text-xs font-medium text-slate-600 mb-1.5; }
+
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4; }
+
+  .tool { @apply inline-flex items-center justify-center gap-1 h-8 min-w-[2rem] px-1.5 rounded-lg text-slate-600 text-sm
+    transition-colors duration-100 hover:bg-brand-50 hover:text-brand-700 cursor-pointer; }
+  .tool-sep { @apply w-px h-5 bg-slate-200 mx-1; }
+
+  .seg { @apply inline-flex p-1 rounded-full bg-white ring-1 ring-inset ring-slate-200; }
+  .seg-btn { @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-slate-500 transition-all duration-200 hover:text-ink; }
+  .seg-btn-active { @apply bg-ink text-white shadow-sm hover:text-white; }
+}
+
+/* ── Motion ── */
+@keyframes co-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes co-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes co-pop { 0% { opacity: 0; transform: translateY(10px) scale(.94); } 70% { opacity: 1; transform: translateY(-2px) scale(1.01); } 100% { transform: none; } }
+@keyframes co-slide { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes co-rise { 0% { opacity: 0; transform: translateY(14px) scale(.96); } 70% { opacity: 1; transform: translateY(-2px); } 100% { transform: none; } }
+@keyframes co-shimmer { 100% { transform: translateX(100%); } }
+@keyframes co-indeterminate { 0% { left: -40%; } 100% { left: 100%; } }
+@keyframes co-float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+@keyframes co-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes co-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+@keyframes co-confetti { 0% { transform: translate3d(0,0,0) rotate(0); opacity: 1; } 100% { transform: translate3d(var(--dx), 110vh, 0) rotate(var(--rot)); opacity: .9; } }
+@keyframes co-swap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.co-view { animation: co-fade-up .32s cubic-bezier(.2,.8,.2,1) both; }
+.co-fade { animation: co-fade .15s ease-out both; }
+.co-pop { animation: co-pop .34s cubic-bezier(.2,.8,.2,1) both; }
+.co-rise { animation: co-rise .34s cubic-bezier(.2,.8,.2,1) both; }
+.co-slide { animation: co-slide .22s cubic-bezier(.2,.8,.2,1) both; }
+.co-float { animation: co-float 4s ease-in-out infinite; }
+.co-swap { animation: co-swap .3s ease-out both; }
+.co-eye { transform-box: fill-box; transform-origin: center; animation: co-blink 4s infinite; }
+.group:hover .co-wiggle { animation: co-wiggle .4s ease-in-out; }
+
+.co-confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 60; }
+.co-confetti i { position: absolute; top: -20px; width: 8px; height: 14px; border-radius: 2px; animation: co-confetti 2.6s cubic-bezier(.25,.6,.4,1) forwards; }
+
+.co-skeleton { position: relative; overflow: hidden; background: rgb(var(--brand-50)); border-radius: 8px; }
+.co-skeleton::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent); animation: co-shimmer 1.3s infinite; }
+
+.co-progress { position: relative; height: 6px; overflow: hidden; background: rgb(var(--brand-100)); border-radius: 99px; }
+.co-progress::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 99px;
+  background: linear-gradient(90deg, rgb(var(--brand-400)), rgb(var(--brand-500)), rgb(var(--accent-300))); animation: co-indeterminate 1.4s ease-in-out infinite; }
+
+/* Offscreen cards skip layout/paint — keeps big collections fast */
+.co-card { content-visibility: auto; contain-intrinsic-size: auto 220px; }
+
+.co-scroll { scrollbar-width: thin; scrollbar-color: rgb(var(--brand-200)) transparent; }
+.co-scroll::-webkit-scrollbar { width: 6px; }
+.co-scroll::-webkit-scrollbar-thumb { background: rgb(var(--brand-200)); border-radius: 99px; }
+
+::selection { background: rgb(var(--brand-200)); }
+
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+details[open] .co-chevron { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .co-confetti { display: none; }
 }
