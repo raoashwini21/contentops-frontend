@@ -625,7 +625,7 @@ function buildTableHTML({ attrs, rows, hasThead, prefix = '', suffix = '' }) {
 
 // ── Editor CSS ──────────────────────────────────
 const EDITOR_STYLES = `
-  .co-editor { font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.75; color: #1d1a33; padding: 32px clamp(20px, 5vw, 56px); max-width: 820px; margin: 0 auto; min-height: 600px; outline: none; }
+  .co-editor { font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15.5px; line-height: 1.8; color: #1f2937; padding: 32px clamp(20px, 5vw, 56px); max-width: 820px; margin: 0 auto; min-height: 600px; outline: none; }
   .co-editor h1 { font-size: 2rem; font-weight: 800; margin: 2rem 0 1rem; line-height: 1.25; }
   .co-editor h2 { font-size: 1.6rem; font-weight: 700; margin: 1.75rem 0 0.75rem; line-height: 1.3; }
   .co-editor h3 { font-size: 1.3rem; font-weight: 700; margin: 1.5rem 0 0.5rem; line-height: 1.35; }
@@ -670,17 +670,13 @@ const EDITOR_STYLES = `
 `;
 
 // ── UI primitives ───────────────────────────────
+// Muted funnel chips: neutral pill + a small colored dot
 const TYPE_STYLES = {
-  BOFU: 'bg-accent-50 text-accent-700 ring-accent-500/20',
-  MOFU: 'bg-amber-50 text-amber-700 ring-amber-500/25',
-  TOFU: 'bg-emerald-50 text-emerald-700 ring-emerald-500/20',
+  BOFU: 'bg-slate-50 text-slate-600 ring-slate-200',
+  MOFU: 'bg-slate-50 text-slate-600 ring-slate-200',
+  TOFU: 'bg-slate-50 text-slate-600 ring-slate-200',
 };
-const TYPE_EMOJI = { BOFU: '🎯', MOFU: '🧭', TOFU: '🌱' };
-const TYPE_BAR = {
-  BOFU: 'from-accent-400 via-rose-400 to-fuchsia-400',
-  MOFU: 'from-amber-300 via-orange-300 to-accent-300',
-  TOFU: 'from-emerald-300 via-teal-300 to-sky-300',
-};
+const TYPE_DOT = { BOFU: 'bg-accent-400', MOFU: 'bg-amber-400', TOFU: 'bg-emerald-400' };
 
 // SalesRobot-flavoured mascot — pure SVG, colors follow the brand tokens
 function Robot({ className = 'w-12 h-12', float = false }) {
@@ -688,26 +684,25 @@ function Robot({ className = 'w-12 h-12', float = false }) {
     <svg viewBox="0 0 64 64" className={`${className} ${float ? 'co-float' : ''}`} aria-hidden>
       <defs>
         <linearGradient id="co-robot-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="rgb(var(--brand-400))" />
-          <stop offset="1" stopColor="rgb(var(--brand-600))" />
+          <stop offset="0" stopColor="rgb(var(--brand-300))" />
+          <stop offset="1" stopColor="rgb(var(--brand-500))" />
         </linearGradient>
       </defs>
-      <line x1="32" y1="6" x2="32" y2="14" stroke="rgb(var(--brand-500))" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="32" cy="6" r="4" fill="rgb(var(--accent-400))" />
-      <rect x="6" y="28" width="6" height="14" rx="3" fill="rgb(var(--brand-300))" />
-      <rect x="52" y="28" width="6" height="14" rx="3" fill="rgb(var(--brand-300))" />
-      <rect x="10" y="14" width="44" height="40" rx="14" fill="url(#co-robot-g)" />
-      <rect x="16" y="22" width="32" height="22" rx="9" fill="white" />
-      <ellipse className="co-eye" cx="25" cy="31" rx="3.2" ry="4" fill="rgb(var(--ink))" />
-      <ellipse className="co-eye" cx="39" cy="31" rx="3.2" ry="4" fill="rgb(var(--ink))" />
-      <path d="M26 38 q6 5 12 0" stroke="rgb(var(--accent-500))" strokeWidth="2.6" fill="none" strokeLinecap="round" />
-      <circle cx="19.5" cy="37" r="2" fill="rgb(var(--accent-300))" opacity=".7" />
-      <circle cx="44.5" cy="37" r="2" fill="rgb(var(--accent-300))" opacity=".7" />
+      <line x1="14" y1="8" x2="18" y2="18" stroke="rgb(var(--brand-400))" strokeWidth="3" strokeLinecap="round" />
+      <line x1="50" y1="8" x2="46" y2="18" stroke="rgb(var(--brand-400))" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="14" cy="8" r="3" fill="rgb(var(--brand-300))" />
+      <circle cx="50" cy="8" r="3" fill="rgb(var(--brand-300))" />
+      <rect x="3" y="30" width="7" height="14" rx="3.5" fill="rgb(var(--brand-300))" />
+      <rect x="54" y="30" width="7" height="14" rx="3.5" fill="rgb(var(--brand-300))" />
+      <rect x="8" y="16" width="48" height="38" rx="16" fill="url(#co-robot-g)" />
+      <rect x="15" y="26" width="34" height="20" rx="10" fill="rgb(var(--brand-800))" />
+      <rect className="co-eye" x="22" y="31" width="6" height="10" rx="3" fill="white" />
+      <rect className="co-eye" x="36" y="31" width="6" height="10" rx="3" fill="white" />
     </svg>
   );
 }
 
-const CONFETTI_COLORS = ['rgb(var(--brand-500))', 'rgb(var(--accent-400))', '#facc15', '#34d399', '#e879f9', '#60a5fa'];
+const CONFETTI_COLORS = ['rgb(var(--brand-400))', 'rgb(var(--brand-600))', 'rgb(var(--accent-300))', '#facc15', '#34d399', 'rgb(var(--ink))'];
 function Confetti() {
   const pieces = useMemo(() => Array.from({ length: 70 }, (_, i) => ({
     left: Math.random() * 100, delay: Math.random() * 0.7, dx: (Math.random() - 0.5) * 240,
@@ -743,24 +738,23 @@ function AnalyzeStep() {
 const BlogCard = memo(function BlogCard({ blog, gsc, type, busy, disabled, onCheck }) {
   const summary = blog.fieldData['post-summary'] || blog.fieldData.excerpt;
   return (
-    <article className="co-card card group relative overflow-hidden flex flex-col p-4 pt-5 transition duration-300 ease-out hover:-translate-y-1 hover:border-brand-200 hover:shadow-xl hover:shadow-brand-500/10">
-      <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${TYPE_BAR[type]}`} />
-      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-        <span className={`chip ring-1 ring-inset ${TYPE_STYLES[type]}`}><span className="co-wiggle inline-block">{TYPE_EMOJI[type]}</span>{type}</span>
+    <article className="co-card card group flex flex-col p-5 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5">
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+        <span className={`chip ring-1 ring-inset ${TYPE_STYLES[type]}`}><span className={`w-1.5 h-1.5 rounded-full ${TYPE_DOT[type]}`} />{type}</span>
         {gsc && (
           <span className="chip bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-500/15">
             <TrendingUp className="w-3 h-3" />{Math.round(gsc.clicks)} clicks · #{gsc.position.toFixed(1)}
           </span>
         )}
       </div>
-      <h3 className="font-bold text-ink text-[15px] leading-snug line-clamp-2 mb-1.5 group-hover:text-brand-700 transition-colors">{blog.fieldData.name}</h3>
+      <h3 className="font-semibold text-ink text-[15px] leading-snug line-clamp-2 mb-1.5 group-hover:text-brand-600 transition-colors">{blog.fieldData.name}</h3>
       <p className="text-[13px] text-slate-500 leading-relaxed line-clamp-2 mb-3">{summary || 'No description'}</p>
       {gsc?.hasKeywords && (
         <p className="text-xs text-slate-400 truncate mb-3" title={gsc.keywords.map(k => k.query).join(', ')}>
           {gsc.keywords.slice(0, 3).map(k => k.query).join(' · ')}
         </p>
       )}
-      <button onClick={() => onCheck(blog)} disabled={disabled} className={`btn w-full mt-auto ${busy ? 'btn-secondary' : 'btn-primary'}`}>
+      <button onClick={() => onCheck(blog)} disabled={disabled} className={`btn w-full mt-auto ${busy ? 'bg-white text-slate-500 ring-1 ring-slate-200' : 'btn-soft'}`}>
         {busy ? <><Loader className="w-4 h-4 animate-spin" />Analyzing…</> : <><Sparkles className="w-4 h-4" />Smart Check</>}
       </button>
     </article>
@@ -1829,7 +1823,7 @@ export default function ContentOps() {
     setImageAltModal({ show: false, src: '', currentAlt: '', index: -1, isUpload: false, file: null, error: '' });
   };
 
-  const navBtn = (active) => `px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors ${active ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-100' : 'text-slate-500 hover:text-brand-700 hover:bg-brand-50/60'}`;
+  const navBtn = (active) => `px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${active ? 'text-ink bg-slate-100' : 'text-slate-500 hover:text-ink hover:bg-slate-50'}`;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -1837,12 +1831,12 @@ export default function ContentOps() {
       <div className="co-bg" aria-hidden />
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-40 h-14 bg-white/70 backdrop-blur-xl border-b border-brand-100/80">
+      <header className="sticky top-0 z-40 h-14 bg-white/75 backdrop-blur-xl border-b border-slate-200/60">
         <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           <button className="group flex items-center gap-2 rounded-xl -ml-1 px-1 py-1" onClick={() => setView('home')}>
             <Robot className="w-9 h-9 transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110" />
-            <span className="font-display text-[17px] font-extrabold tracking-tight text-ink">Content<span className="text-brand-600">Ops</span></span>
-            <span className="hidden sm:inline-flex chip bg-accent-50 text-accent-600 ring-1 ring-inset ring-accent-500/20">by SalesRobot</span>
+            <span className="font-display text-[18px] font-semibold tracking-tight text-ink">Content<span className="text-brand-500">Ops</span></span>
+            <span className="hidden sm:inline-flex chip bg-white text-slate-500 ring-1 ring-inset ring-slate-200">by SalesRobot</span>
           </button>
 
           {view === 'review' && selectedBlog && (
@@ -1882,14 +1876,14 @@ export default function ContentOps() {
           <div className="co-view relative max-w-5xl mx-auto pt-8 sm:pt-16 pb-10">
             <div className="grid md:grid-cols-[1.25fr_1fr] gap-10 items-center">
               <div className="text-center md:text-left">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200 shadow-sm mb-6">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3.5 py-1 text-sm font-medium text-accent-500 ring-1 ring-accent-300 mb-6">
                   <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-75 animate-ping" /><span className="relative inline-flex h-2 w-2 rounded-full bg-accent-500" /></span>
                   Your blog's new best friend
                 </span>
-                <h1 className="text-4xl sm:text-6xl font-extrabold text-ink leading-[1.02]">
+                <h1 className="text-4xl sm:text-6xl font-semibold text-ink leading-[1.08]">
                   Keep every blog{' '}
                   <span className="relative whitespace-nowrap">
-                    <span className="bg-gradient-to-r from-brand-500 via-fuchsia-500 to-accent-500 bg-clip-text text-transparent">fresh</span>
+                    <span className="bg-gradient-to-r from-brand-500 to-accent-400 bg-clip-text text-transparent">fresh</span>
                     <svg viewBox="0 0 200 20" className="absolute -bottom-2 left-0 w-full h-3 text-accent-400" preserveAspectRatio="none" aria-hidden><path d="M2 14 Q 50 2 100 10 T 198 6" stroke="currentColor" strokeWidth="5" fill="none" strokeLinecap="round" /></svg>
                   </span>{' '}<span className="whitespace-nowrap">& accurate <span className="inline-block co-float">✨</span></span>
                 </h1>
@@ -1904,8 +1898,8 @@ export default function ContentOps() {
                 </div>
               </div>
               <div className="relative mx-auto w-56 h-56 sm:w-72 sm:h-72">
-                <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-brand-200 via-fuchsia-100 to-accent-100 rotate-6" />
-                <div className="absolute inset-0 rounded-[2.5rem] bg-white/70 ring-1 ring-brand-100 backdrop-blur -rotate-3 co-dots" />
+                <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-brand-100 to-accent-100 rotate-6" />
+                <div className="absolute inset-0 rounded-[2.5rem] bg-white/80 ring-1 ring-slate-200 backdrop-blur -rotate-3 co-dots" />
                 <Robot className="absolute inset-0 m-auto w-36 h-36 sm:w-44 sm:h-44 drop-shadow-xl" float />
                 <span className="absolute -top-3 -left-3 chip bg-white text-emerald-700 ring-1 ring-emerald-200 shadow-md px-3 py-1 text-xs co-float" style={{ animationDelay: '-1s' }}>✅ Facts verified</span>
                 <span className="absolute top-6 -right-8 chip bg-white text-brand-700 ring-1 ring-brand-200 shadow-md px-3 py-1 text-xs co-float" style={{ animationDelay: '-2s' }}>📈 +GSC keywords</span>
@@ -1914,15 +1908,15 @@ export default function ContentOps() {
             </div>
             <div className="mt-20 grid sm:grid-cols-3 gap-4">
               {[
-                [Search, 'Live verification', 'Brave + Google search check every claim, price and stat.', 'from-brand-400 to-brand-600'],
-                [TrendingUp, 'GSC-aware', 'Upload Search Console data to weave in ranking keywords.', 'from-fuchsia-400 to-pink-500'],
-                [ShieldCheck, 'Publish-safe', 'Tables, embeds and lists are locked and verified on publish.', 'from-accent-400 to-amber-400'],
+                [Search, 'Live verification', 'Brave + Google search check every claim, price and stat.', 'bg-brand-50 text-brand-600'],
+                [TrendingUp, 'GSC-aware', 'Upload Search Console data to weave in ranking keywords.', 'bg-accent-50 text-accent-500'],
+                [ShieldCheck, 'Publish-safe', 'Tables, embeds and lists are locked and verified on publish.', 'bg-emerald-50 text-emerald-600'],
               ].map(([Icon, t, d, g]) => (
                 <div key={t} className="card group p-5 transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-brand-500/10">
-                  <span className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${g} items-center justify-center shadow-md mb-3 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110`}>
-                    <Icon className="w-5 h-5 text-white" />
+                  <span className={`inline-flex w-10 h-10 rounded-xl ${g} items-center justify-center mb-3 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110`}>
+                    <Icon className="w-5 h-5" />
                   </span>
-                  <p className="font-display text-base font-bold text-ink">{t}</p>
+                  <p className="font-display text-base font-semibold text-ink">{t}</p>
                   <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">{d}</p>
                 </div>
               ))}
@@ -1934,7 +1928,7 @@ export default function ContentOps() {
         {view === 'setup' && (
           <div className="co-view max-w-xl mx-auto">
             <div className="mb-6">
-              <h1 className="text-3xl font-extrabold text-ink">Settings ⚙️</h1>
+              <h1 className="text-3xl font-semibold text-ink">Settings</h1>
               <p className="text-sm text-slate-500 mt-1">🔒 Keys are stored only in this browser.</p>
             </div>
             <div className="card p-6 space-y-4">
@@ -1975,7 +1969,7 @@ export default function ContentOps() {
           <div className="co-view">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-3xl font-extrabold text-ink">Blog posts <span className="inline-block co-float">📚</span></h1>
+                <h1 className="text-3xl font-semibold text-ink">Blog posts</h1>
                 <p className="text-sm text-slate-500 mt-1">
                   {blogs.length
                     ? <>{blogs.length} posts{gscData && <> · <span className="text-brand-600 font-semibold">{gscData.blogsCount} with GSC data</span></>}</>
@@ -1984,7 +1978,7 @@ export default function ContentOps() {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={() => setShowGscModal(true)} className="btn btn-secondary">
-                  <TrendingUp className="w-4 h-4 text-fuchsia-500" />{gscData ? `GSC · ${gscData.blogsCount}` : 'Upload GSC'}
+                  <TrendingUp className="w-4 h-4" />{gscData ? `GSC · ${gscData.blogsCount}` : 'Upload GSC'}
                 </button>
                 <button onClick={testConnection} disabled={loading} className="btn btn-ghost"><Zap className="w-4 h-4" />Test</button>
                 <button onClick={fetchBlogsQuick} disabled={loading} className="btn btn-secondary">Quick load</button>
@@ -1996,12 +1990,12 @@ export default function ContentOps() {
 
             {analyzingId && selectedBlog && (
               <div className="card relative overflow-hidden p-5 mb-6 co-rise">
-                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-brand-200 to-accent-100 blur-2xl opacity-70" />
+                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-brand-100 to-accent-50 blur-2xl opacity-80" />
                 <div className="relative flex items-center gap-4">
                   <Robot className="w-14 h-14 shrink-0" float />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase tracking-wider text-brand-600">Smart Check running</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Smart Check running</p>
                       <span className="chip bg-brand-50 text-brand-700 ring-1 ring-brand-100"><ElapsedTimer /></span>
                     </div>
                     <p className="font-display text-base font-bold text-ink truncate mt-0.5">{selectedBlog.fieldData.name}</p>
@@ -2021,11 +2015,11 @@ export default function ContentOps() {
                   {query && <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
                 </div>
                 <div className="seg overflow-x-auto max-w-full">
-                  {[['all', '✨ All'], ['gsc', '📈 GSC'], ['BOFU', '🎯 BOFU'], ['MOFU', '🧭 MOFU'], ['TOFU', '🌱 TOFU']]
+                  {[['all', 'All'], ['gsc', 'GSC'], ['BOFU', 'BOFU'], ['MOFU', 'MOFU'], ['TOFU', 'TOFU']]
                     .filter(([k]) => k !== 'gsc' || gscData)
                     .map(([k, label]) => (
                       <button key={k} onClick={() => setFilter(k)} className={`seg-btn px-2.5 py-1 text-[13px] ${filter === k ? 'seg-btn-active' : ''}`}>
-                        {label}<span className="text-[11px] text-slate-400 tabular-nums">{filterCounts[k]}</span>
+                        {TYPE_DOT[k] && <span className={`w-1.5 h-1.5 rounded-full ${TYPE_DOT[k]}`} />}{label}<span className={`text-[11px] tabular-nums ${filter === k ? 'text-white/60' : 'text-slate-400'}`}>{filterCounts[k]}</span>
                       </button>
                     ))}
                 </div>
@@ -2045,7 +2039,7 @@ export default function ContentOps() {
                 ))}
               </div>
             ) : !blogs.length ? (
-              <div className="card border-2 border-dashed border-brand-200 bg-white/70 py-16 px-6 text-center">
+              <div className="card border-dashed border-slate-300 bg-white/80 py-16 px-6 text-center">
                 <Robot className="w-20 h-20 mx-auto mb-4" float />
                 <p className="font-display text-xl font-bold text-ink">Nothing here yet 👋</p>
                 <p className="text-sm text-slate-500 mt-1 mb-6">Quick load pulls your Webflow posts in seconds.</p>
@@ -2183,7 +2177,7 @@ export default function ContentOps() {
               <aside className="space-y-3 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto co-scroll lg:pr-1 -mr-1 pb-1">
                 <div className="card p-4">
                   <div className="flex flex-wrap gap-1.5 mb-4">
-                    <span className={`chip ring-1 ring-inset ${TYPE_STYLES[result.blogType]}`}>{result.blogType}</span>
+                    <span className={`chip ring-1 ring-inset ${TYPE_STYLES[result.blogType]}`}><span className={`w-1.5 h-1.5 rounded-full ${TYPE_DOT[result.blogType]}`} />{result.blogType}</span>
                     {highlightedData && <span className="chip bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-600/15">{highlightedData.changesCount} changes</span>}
                     <span className="chip bg-slate-100 text-slate-600">{result.searchesUsed} searches</span>
                     <span className="chip bg-slate-100 text-slate-600">{result.duration}s</span>
@@ -2287,11 +2281,11 @@ export default function ContentOps() {
           <div className="co-view max-w-md mx-auto text-center py-12">
             <Confetti />
             <div className="relative w-40 h-40 mx-auto mb-6 co-pop">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-brand-200 via-fuchsia-100 to-accent-100 animate-pulse" />
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-brand-100 to-accent-100 animate-pulse" />
               <Robot className="absolute inset-0 m-auto w-28 h-28" float />
               <span className="absolute -top-1 -right-1 text-3xl co-float">🎉</span>
             </div>
-            <h1 className="text-4xl font-extrabold text-ink">Shipped! 🚀</h1>
+            <h1 className="text-4xl font-semibold text-ink">Shipped! 🚀</h1>
             <p className="text-slate-500 mt-2 mb-8">{blogTitle ? <>“<span className="font-semibold text-ink">{blogTitle}</span>” is fresh on Webflow.</> : 'Content updated on Webflow.'}</p>
             <button onClick={backToDashboard} className="btn btn-primary px-6 py-3 text-[15px]">Check another post<ArrowRight className="w-4 h-4" /></button>
           </div>
@@ -2442,9 +2436,9 @@ export default function ContentOps() {
         </Modal>
       )}
 
-      <footer className="border-t border-brand-100 bg-white/70 backdrop-blur mt-auto">
+      <footer className="border-t border-slate-200/70 bg-white/80 backdrop-blur mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between flex-wrap gap-3 text-xs text-slate-400">
-          <span className="flex items-center gap-1.5"><Robot className="w-5 h-5" /><span className="font-semibold text-slate-600">ContentOps</span> by <span className="font-semibold text-accent-500">SalesRobot</span> 💜</span>
+          <span className="flex items-center gap-1.5"><Robot className="w-5 h-5" /><span className="font-semibold text-slate-600">ContentOps</span> by <span className="font-semibold text-brand-500">SalesRobot</span> 💙</span>
           <span>Brave + Google Search · Claude · Webflow CMS</span>
         </div>
       </footer>

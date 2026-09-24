@@ -7,31 +7,32 @@
    SalesRobot's exact palette; the whole UI follows.
    ══════════════════════════════════════════════ */
 :root {
-  /* primary: robot violet */
-  --brand-50: 244 242 255;
-  --brand-100: 234 231 255;
-  --brand-200: 214 208 254;
-  --brand-300: 185 173 253;
-  --brand-400: 151 132 250;
-  --brand-500: 120 94 246;
-  --brand-600: 101 72 234;
-  --brand-700: 85 57 207;
-  --brand-800: 70 48 168;
-  --brand-900: 58 43 134;
+  /* primary: SalesRobot sky blue (logo) */
+  --brand-50: 240 248 255;
+  --brand-100: 224 240 254;
+  --brand-200: 188 223 252;
+  --brand-300: 139 199 248;
+  --brand-400: 88 172 243;
+  --brand-500: 52 148 236;
+  --brand-600: 34 122 214;
+  --brand-700: 29 98 176;
+  --brand-800: 30 83 144;
+  --brand-900: 30 70 118;
 
-  /* accent: warm coral for playful highlights */
-  --accent-50: 255 244 241;
-  --accent-100: 255 230 224;
-  --accent-200: 255 204 192;
-  --accent-300: 255 168 148;
-  --accent-400: 255 128 102;
-  --accent-500: 255 97 70;
-  --accent-600: 237 72 45;
-  --accent-700: 199 53 30;
-  --accent-800: 164 44 27;
-  --accent-900: 136 40 28;
+  /* accent: soft pink/magenta (site badges & background wash) */
+  --accent-50: 253 242 250;
+  --accent-100: 252 231 246;
+  --accent-200: 249 206 236;
+  --accent-300: 244 167 218;
+  --accent-400: 236 118 192;
+  --accent-500: 222 80 166;
+  --accent-600: 196 56 140;
+  --accent-700: 164 40 115;
+  --accent-800: 134 34 95;
+  --accent-900: 111 31 80;
 
-  --ink: 24 20 51;
+  /* ink: SalesRobot navy (CTA buttons, headings) */
+  --ink: 13 19 38;
 }
 
 * {
@@ -43,50 +44,55 @@
 html { scroll-behavior: smooth; }
 
 body {
-  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #faf9ff;
+  font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #ffffff;
   color: rgb(var(--ink));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-h1, h2, .font-display { font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; }
+h1, h2, .font-display { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.025em; }
 
-/* Soft color blobs behind the app */
-.co-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.co-bg::before, .co-bg::after { content: ''; position: absolute; border-radius: 9999px; filter: blur(90px); opacity: .5; }
-.co-bg::before { width: 520px; height: 520px; top: -180px; left: -120px; background: rgb(var(--brand-300)); }
-.co-bg::after { width: 460px; height: 460px; top: 30%; right: -160px; background: rgb(var(--accent-200)); }
+/* Soft top wash, like salesrobot.co's hero */
+.co-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 0% 0%, rgb(var(--brand-100) / .9), transparent 70%),
+    radial-gradient(55% 40% at 100% 0%, rgb(var(--accent-100) / .8), transparent 70%),
+    linear-gradient(180deg, #f5f9ff 0%, #ffffff 55%); }
 .co-dots { background-image: radial-gradient(rgb(var(--brand-300) / .35) 1px, transparent 1px); background-size: 22px 22px; }
 
 @layer components {
-  .card { @apply bg-white rounded-2xl border border-brand-100 shadow-[0_1px_2px_rgba(40,30,110,0.05),0_8px_24px_-12px_rgba(90,70,220,0.12)]; }
+  .card { @apply bg-white rounded-2xl border border-slate-200/70 shadow-[0_1px_2px_rgba(13,19,38,0.04),0_8px_24px_-14px_rgba(30,70,118,0.14)]; }
 
-  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold whitespace-nowrap select-none
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap select-none
     transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out
     focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25
-    hover:-translate-y-px active:translate-y-0 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none; }
-  .btn-primary { @apply text-white bg-gradient-to-r from-brand-500 to-fuchsia-500 shadow-md shadow-brand-500/30 hover:shadow-lg hover:shadow-brand-500/40 hover:brightness-105; }
-  .btn-dark { @apply bg-ink text-white shadow-md shadow-ink/20 hover:bg-brand-900; }
-  .btn-success { @apply text-white bg-gradient-to-r from-emerald-500 to-teal-500 shadow-md shadow-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/40; }
+    active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none; }
+  /* SalesRobot CTA: navy pill */
+  .btn-primary { @apply bg-ink text-white shadow-md shadow-ink/15 hover:bg-[#1c2a4d] hover:-translate-y-px hover:shadow-lg hover:shadow-ink/20; }
+  .btn-dark { @apply bg-ink text-white shadow-md shadow-ink/15 hover:bg-[#1c2a4d]; }
+  .btn-brand { @apply bg-brand-500 text-white shadow-md shadow-brand-500/25 hover:bg-brand-600; }
+  .btn-soft { @apply bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100 hover:bg-ink hover:text-white hover:ring-ink; }
+  .btn-success { @apply bg-emerald-600 text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 hover:-translate-y-px; }
   .btn-danger { @apply bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300; }
-  .btn-secondary { @apply bg-white text-ink border border-brand-100 shadow-sm shadow-brand-900/5 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50; }
-  .btn-ghost { @apply text-slate-600 hover:bg-brand-50 hover:text-brand-700; }
+  /* SalesRobot secondary: outlined pill */
+  .btn-secondary { @apply bg-white text-ink border border-ink/80 hover:bg-ink hover:text-white; }
+  .btn-ghost { @apply text-slate-600 hover:bg-brand-50 hover:text-ink; }
 
-  .input { @apply w-full rounded-xl border border-brand-100 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400
+  .input { @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400
     transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/15; }
-  .label { @apply block text-xs font-semibold text-slate-600 mb-1.5; }
+  .label { @apply block text-xs font-medium text-slate-600 mb-1.5; }
 
-  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4; }
 
   .tool { @apply inline-flex items-center justify-center gap-1 h-8 min-w-[2rem] px-1.5 rounded-lg text-slate-600 text-sm
     transition-colors duration-100 hover:bg-brand-50 hover:text-brand-700 cursor-pointer; }
-  .tool-sep { @apply w-px h-5 bg-brand-100 mx-1; }
+  .tool-sep { @apply w-px h-5 bg-slate-200 mx-1; }
 
-  .seg { @apply inline-flex p-1 rounded-xl bg-brand-50 ring-1 ring-inset ring-brand-100; }
-  .seg-btn { @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-slate-500 transition-all duration-200 hover:text-brand-700; }
-  .seg-btn-active { @apply bg-white text-brand-700 shadow-sm shadow-brand-500/10 ring-1 ring-brand-200; }
+  .seg { @apply inline-flex p-1 rounded-full bg-white ring-1 ring-inset ring-slate-200; }
+  .seg-btn { @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-slate-500 transition-all duration-200 hover:text-ink; }
+  .seg-btn-active { @apply bg-ink text-white shadow-sm hover:text-white; }
 }
 
 /* ── Motion ── */
@@ -122,7 +128,7 @@ h1, h2, .font-display { font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans',
 
 .co-progress { position: relative; height: 6px; overflow: hidden; background: rgb(var(--brand-100)); border-radius: 99px; }
 .co-progress::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 99px;
-  background: linear-gradient(90deg, rgb(var(--brand-500)), #d946ef, rgb(var(--accent-400))); animation: co-indeterminate 1.4s ease-in-out infinite; }
+  background: linear-gradient(90deg, rgb(var(--brand-400)), rgb(var(--brand-500)), rgb(var(--accent-300))); animation: co-indeterminate 1.4s ease-in-out infinite; }
 
 /* Offscreen cards skip layout/paint — keeps big collections fast */
 .co-card { content-visibility: auto; contain-intrinsic-size: auto 220px; }
